@@ -39,10 +39,29 @@ spec:
           spec:
             description: spec defines the desired state of StatefulSetBackup
             properties:
+              PreBackupHook:
+                properties:
+                  command:
+                    type: string
+                type: object
+              RetentionPolicy:
+                properties:
+                  keepLast:
+                    type: integer
+                type: object
               foo:
                 description: foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go
                   to remove/update
                 type: string
+              schedule:
+                type: string
+              statefulSetRef:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                type: object
             type: object
           status:
             description: status defines the observed state of StatefulSetBackup

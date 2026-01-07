@@ -23,6 +23,18 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type StatefulSetRef struct {
+	Name string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type RetentionPolicy struct {
+	KeepLast int `json:"keepLast,omitempty"`
+}
+
+type PreBackupHook struct {
+	Command string `json:"command,omitempty"`
+}
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup
 type StatefulSetBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -33,6 +45,10 @@ type StatefulSetBackupSpec struct {
 	// foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go to remove/update
 	// +optional
 	Foo *string `json:"foo,omitempty"`
+	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
+	Schedule string `json:"schedule,omitempty"`
+	RetentionPolicy RetentionPolicy `json:"RetentionPolicy,omitempty"`
+	PreBackupHook PreBackupHook `json:"PreBackupHook,omitempty"`
 }
 
 // StatefulSetBackupStatus defines the observed state of StatefulSetBackup.
