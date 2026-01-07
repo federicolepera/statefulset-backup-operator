@@ -18,13 +18,19 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"github.com/robfig/cron/v3"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	backupv1alpha1 "github.com/federicolepera/statefulset-backup-operator/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // StatefulSetBackupReconciler reconciles a StatefulSetBackup object
@@ -47,13 +53,78 @@ type StatefulSetBackupReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
 func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	backup := &backupv1alpha1.StatefulSetBackup{}
+	if err := r.Get(ctx, req.NamespacedName, backup); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "ciao")
+		return ctrl.Result{}, err
+	}
 
+	sts := &appsv1.StatefulSet{}
+	stsKey := types.NamespacedName {
+		Name: backup.Spec.StatefulSetRef.Name,
+		Namespace: backup.Spec.StatefulSetRef.Namespace,
+	}
+
+	if err := r.Get(ctx, stsKey, sts); err != nil {
+		logger.Error(err, "Unable to get StatefulSet")
+		backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
+		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	shouldBackup, err := r.shouldCreateBackup(backup)
+	if err != nil {
+		logger.Error(err, "")
+		backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
+		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	if shouldBackup {
+		logger.Info("Creating new backup")
+	}
 	return ctrl.Result{}, nil
 }
 
+func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.StatefulSetBackup) (bool, error) {
+	// Se non c'è schedule, backup manuale (creato solo alla creazione della risorsa)
+	if backup.Spec.Schedule == "" {
+		if backup.Status.LastBackupTime.IsZero() {
+			return true, nil
+		} else {
+			return false, nil
+		}
+	} else {
+		parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+		schedule, err := parser.Parse(backup.Spec.Schedule)
+		if err != nil {
+			return false, fmt.Errorf("invalid cron schedule %q: %w", backup.Spec.Schedule, err)
+		}
+		now := time.Now()
+
+		if backup.Status.LastBackupTime.IsZero() {
+			return true, nil
+		}
+
+		lastBackup := backup.Status.LastBackupTime.Time
+		nextScheduled := schedule.Next(lastBackup)
+
+		if now.After(nextScheduled) || now.Equal(nextScheduled){
+			return true, nil
+		}
+
+		return false, nil
+	}
+}
 // SetupWithManager sets up the controller with the Manager.
 func (r *StatefulSetBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
