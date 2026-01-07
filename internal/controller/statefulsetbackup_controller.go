@@ -21,12 +21,16 @@ import (
 	"fmt"
 	"time"
 
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/robfig/cron/v3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	backupv1alpha1 "github.com/federicolepera/statefulset-backup-operator/api/v1alpha1"
@@ -91,10 +95,77 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if shouldBackup {
 		logger.Info("Creating new backup")
+
+		r.createSnapshots(ctx, sts, backup)
+
+		now := metav1.Now()
+		backup.Status.LastBackupTime = now
+		backup.Status.Phase = backupv1alpha1.BackupPhaseReady
+
+		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
+func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup,) ([]backupv1alpha1.SnapshotInfo, error) {
+	var snapshots []backupv1alpha1.SnapshotInfo
+
+	logger := log.FromContext(ctx)
+
+	for _, vct := range sts.Spec.VolumeClaimTemplates {
+		for i := int32(0); i < *sts.Spec.Replicas; i++ {
+			pvcName := fmt.Sprintf("%s-%s-%d", vct.Name, sts.Name, i)
+			pvc := &corev1.PersistentVolumeClaim{}
+
+			pvcKey := types.NamespacedName{
+				Name: pvcName,
+				Namespace: sts.Namespace,
+			}
+
+			if err := r.Get(ctx, pvcKey, pvc); err != nil {
+				logger.Error(err, "PVC not found", "pvc", pvcName)
+				continue
+			}
+
+			snapshotName := fmt.Sprintf("%s-%s-%d", backup.Name, vct.Name, time.Now().Unix())
+			snapshot := &snapshotv1.VolumeSnapshot{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: snapshotName,
+					Namespace: sts.Namespace,
+					Labels: map[string]string{
+						"backup.sts-backup.io/statefulset": sts.Name,
+						"backup.sts-backup.io/policy":      backup.Name,
+					},
+				},
+				Spec: snapshotv1.VolumeSnapshotSpec{
+					Source: snapshotv1.VolumeSnapshotSource{
+						PersistentVolumeClaimName: &pvcName,
+					},
+				},
+			}
+
+			//Per ora non possibile inserire la snapshotclass quindi settata di default
+			if err := r.Create(ctx, snapshot); err != nil {
+				logger.Error(err, "Failed to create snapshot", "snapshot", snapshotName)
+				return nil, err
+			}
+
+			snapshots = append(snapshots, backupv1alpha1.SnapshotInfo{
+				Name:         snapshotName,
+				CreationTime: metav1.Now(),
+				PVCName:      pvcName,
+				ReadyToUse:   false,
+			})
+
+			logger.Info("Created snapshot", "snapshot", snapshotName, "pvc", pvcName)
+		}
+	}
+
+	return snapshots, nil
+}
 func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.StatefulSetBackup) (bool, error) {
 	// Se non c'è schedule, backup manuale (creato solo alla creazione della risorsa)
 	if backup.Spec.Schedule == "" {

@@ -85,6 +85,14 @@ type StatefulSetBackupStatus struct {
 	LastBackupTime metav1.Time `json:"lastBackupTime,omitempty"`
 }
 
+type SnapshotInfo struct {
+	Name         string      `json:"name"`
+	CreationTime metav1.Time `json:"creationTime"`
+	PVCName      string      `json:"pvcName"`
+	Size         string      `json:"size,omitempty"`
+	ReadyToUse   bool        `json:"readyToUse"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
