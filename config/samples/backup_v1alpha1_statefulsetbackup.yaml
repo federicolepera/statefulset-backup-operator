@@ -1,0 +1,9 @@
+apiVersion: backup.sts-backup.io/v1alpha1
+kind: StatefulSetBackup
+metadata:
+  labels:
+    app.kubernetes.io/name: statefulset-backup-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: statefulsetbackup-sample
+spec:
+  # TODO(user): Add fields here
