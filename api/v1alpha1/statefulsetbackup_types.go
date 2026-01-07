@@ -33,7 +33,7 @@ type RetentionPolicy struct {
 }
 
 type PreBackupHook struct {
-	Command string `json:"command,omitempty"`
+	Command []string `json:"command,omitempty"`
 }
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup
 type StatefulSetBackupSpec struct {
@@ -47,10 +47,17 @@ type StatefulSetBackupSpec struct {
 	Foo *string `json:"foo,omitempty"`
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
-	RetentionPolicy RetentionPolicy `json:"RetentionPolicy,omitempty"`
-	PreBackupHook PreBackupHook `json:"PreBackupHook,omitempty"`
+	RetentionPolicy RetentionPolicy `json:"retentionPolicy,omitempty"`
+	PreBackupHook PreBackupHook `json:"preBackupHook,omitempty"`
 }
 
+type BackupPhase string
+
+const (
+	BackupPhaseReady      BackupPhase = "Ready"
+	BackupPhaseInProgress BackupPhase = "InProgress"
+	BackupPhaseFailed     BackupPhase = "Failed"
+)
 // StatefulSetBackupStatus defines the observed state of StatefulSetBackup.
 type StatefulSetBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -72,6 +79,10 @@ type StatefulSetBackupStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	Phase BackupPhase `json:"phase,omitempty"`
+
+	LastBackupTime metav1.Time `json:"lastBackupTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
