@@ -107,7 +107,61 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
+	requeueAfter := r.calculateRequeueAfter(backup)
+	if requeueAfter > 0 {
+		logger.Info("Scheduling next reconcile", "after", requeueAfter.String())
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
 	return ctrl.Result{}, nil
+}
+
+
+func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alpha1.StatefulSetBackup) time.Duration {
+	// Se non c'è schedule, non c'è bisogno di requeue
+	if backup.Spec.Schedule == "" {
+		return 0
+	}
+
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	schedule, err := parser.Parse(backup.Spec.Schedule)
+	if err != nil {
+		// Se lo schedule è invalido, riprova tra 1 minuto
+		return 1 * time.Minute
+	}
+
+	now := time.Now()
+	var nextScheduled time.Time
+
+	if backup.Status.LastBackupTime.IsZero() {
+		// Se non c'è mai stato un backup, il prossimo è già "ora"
+		return 10 * time.Second
+	}
+
+	// Calcola il prossimo backup dopo l'ultimo
+	lastBackup := backup.Status.LastBackupTime.Time
+	nextScheduled = schedule.Next(lastBackup)
+
+	// Se il prossimo backup è nel passato (perché il controller era down),
+	// dovrebbe essere eseguito subito
+	if nextScheduled.Before(now) || nextScheduled.Equal(now) {
+		return 10 * time.Second
+	}
+
+	// Altrimenti calcola quanto tempo manca
+	duration := time.Until(nextScheduled)
+
+	// Aggiungi un piccolo buffer per evitare di arrivare troppo presto
+	// e controlla qualche secondo dopo l'orario previsto
+	duration += 30 * time.Second
+
+	// Limita il requeue massimo a 1 ora per sicurezza
+	// (così se c'è un problema, non aspettiamo giorni)
+	if duration > 1*time.Hour {
+		return 1 * time.Hour
+	}
+
+	return duration
 }
 
 func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup,) ([]backupv1alpha1.SnapshotInfo, error) {
