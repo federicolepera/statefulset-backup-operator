@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/backup.sts-backup.io_statefulsetbackups.yaml
+- bases/backup.sts-backup.io_statefulsetrestores.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
