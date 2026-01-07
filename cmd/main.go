@@ -37,6 +37,7 @@ import (
 
 	backupv1alpha1 "github.com/federicolepera/statefulset-backup-operator/api/v1alpha1"
 	"github.com/federicolepera/statefulset-backup-operator/internal/controller"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -50,6 +51,8 @@ func init() {
 
 	utilruntime.Must(backupv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+
+	utilruntime.Must(snapshotv1.AddToScheme(scheme))
 }
 
 // nolint:gocyclo
