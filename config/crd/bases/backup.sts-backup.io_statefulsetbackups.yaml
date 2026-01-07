@@ -39,20 +39,22 @@ spec:
           spec:
             description: spec defines the desired state of StatefulSetBackup
             properties:
-              PreBackupHook:
-                properties:
-                  command:
-                    type: string
-                type: object
-              RetentionPolicy:
-                properties:
-                  keepLast:
-                    type: integer
-                type: object
               foo:
                 description: foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go
                   to remove/update
                 type: string
+              preBackupHook:
+                properties:
+                  command:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              retentionPolicy:
+                properties:
+                  keepLast:
+                    type: integer
+                type: object
               schedule:
                 type: string
               statefulSetRef:
@@ -135,6 +137,11 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              lastBackupTime:
+                format: date-time
+                type: string
+              phase:
+                type: string
             type: object
         required:
         - spec
