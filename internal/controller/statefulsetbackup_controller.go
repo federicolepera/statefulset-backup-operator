@@ -105,6 +105,10 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
 			logger.Error(updateErr, "Failed to update status")
 		}
+
+		if err := r.applyRetentionPolicy(ctx, backup); err != nil {
+			logger.Error(err, "Failed to apply retention policy")
+		}
 	}
 
 	requeueAfter := r.calculateRequeueAfter(backup)
@@ -116,6 +120,34 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
+func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,) error {
+	logger := log.FromContext(ctx)
+	
+	// Lista tutti i snapshot per questa policy
+	snapshotList := &snapshotv1.VolumeSnapshotList{}
+	if err := r.List(ctx, snapshotList, client.MatchingLabels{
+		"backup.sts-backup.io/policy": backup.Name,
+	}); err != nil {
+		return err
+	}
+
+	// Se abbiamo più snapshot del limite, elimina i più vecchi
+	if len(snapshotList.Items) > backup.Spec.RetentionPolicy.KeepLast {
+		// Ordina per data di creazione
+		// ... implementazione dell'ordinamento ...
+		
+		toDelete := len(snapshotList.Items) - backup.Spec.RetentionPolicy.KeepLast
+		for i := 0; i < toDelete; i++ {
+			if err := r.Delete(ctx, &snapshotList.Items[i]); err != nil {
+				logger.Error(err, "Failed to delete old snapshot")
+			} else {
+				logger.Info("Deleted old snapshot", "snapshot", snapshotList.Items[i].Name)
+			}
+		}
+	}
+
+	return nil
+}
 
 func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alpha1.StatefulSetBackup) time.Duration {
 	// Se non c'è schedule, non c'è bisogno di requeue
