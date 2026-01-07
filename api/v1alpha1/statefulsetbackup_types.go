@@ -29,7 +29,8 @@ type StatefulSetRef struct {
 }
 
 type RetentionPolicy struct {
-	KeepLast int `json:"keepLast,omitempty"`
+	KeepLast int `json:"keepLast"`
+	KeepDays *int `json:"keepDays,omitempty"`
 }
 
 type PreBackupHook struct {
@@ -44,7 +45,6 @@ type StatefulSetBackupSpec struct {
 
 	// foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go to remove/update
 	// +optional
-	Foo *string `json:"foo,omitempty"`
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 	RetentionPolicy RetentionPolicy `json:"retentionPolicy,omitempty"`
