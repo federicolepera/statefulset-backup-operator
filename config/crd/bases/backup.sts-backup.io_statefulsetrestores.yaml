@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: statefulsetbackups.backup.sts-backup.io
+  name: statefulsetrestores.backup.sts-backup.io
 spec:
   group: backup.sts-backup.io
   names:
-    kind: StatefulSetBackup
-    listKind: StatefulSetBackupList
-    plural: statefulsetbackups
-    singular: statefulsetbackup
+    kind: StatefulSetRestore
+    listKind: StatefulSetRestoreList
+    plural: statefulsetrestores
+    singular: statefulsetrestore
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: StatefulSetBackup is the Schema for the statefulsetbackups API
+        description: StatefulSetRestore is the Schema for the statefulsetrestores
+          API
         properties:
           apiVersion:
             description: |-
@@ -37,50 +38,52 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of StatefulSetBackup
+            description: spec defines the desired state of StatefulSetRestore
             properties:
-              preBackupHook:
-                properties:
-                  command:
-                    items:
-                      type: string
-                    type: array
-                type: object
-              retentionPolicy:
-                properties:
-                  keepDays:
-                    type: integer
-                  keepLast:
-                    type: integer
-                required:
-                - keepLast
-                type: object
-              schedule:
+              backupName:
+                description: |-
+                  Nome del backup da cui ripristinare
+                  Se non specificato, usa l'ultimo backup disponibile
                 type: string
+              scaleDown:
+                description: |-
+                  Se true, scala lo StatefulSet a 0 prima del restore
+                  Default: true (consigliato per consistenza)
+                type: boolean
+              snapshotNames:
+                description: |-
+                  Lista specifica di snapshot da ripristinare (uno per PVC)
+                  Esempio: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]
+                  Utile per restore selettivo (es: ripristina solo il PVC del pod-0)
+                  Se non specificata, ripristina tutti i PVC dello StatefulSet
+                items:
+                  type: string
+                type: array
               statefulSetRef:
-                description: foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go
-                  to remove/update
+                description: Riferimento allo StatefulSet da ripristinare
                 properties:
                   name:
                     type: string
                   namespace:
                     type: string
                 type: object
+              useLatestBackup:
+                description: |-
+                  Restore dal backup più recente
+                  Se true, ignora BackupName e usa l'ultimo backup disponibile
+                type: boolean
+            required:
+            - statefulSetRef
             type: object
           status:
-            description: status defines the observed state of StatefulSetBackup
+            description: status defines the observed state of StatefulSetRestore
             properties:
+              completionTime:
+                description: Tempo di completamento del restore
+                format: date-time
+                type: string
               conditions:
-                description: |-
-                  conditions represent the current state of the StatefulSetBackup resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                description: Condizioni dello stato del restore
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -136,13 +139,36 @@ spec:
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
-              lastBackupTime:
-                format: date-time
-                type: string
+              originalReplicas:
+                description: Numero di repliche originali (per scale up dopo restore)
+                format: int32
+                type: integer
               phase:
+                description: Fase corrente del restore
+                type: string
+              restoredSnapshots:
+                description: Snapshot ripristinati
+                items:
+                  properties:
+                    pvcName:
+                      type: string
+                    restoreTime:
+                      format: date-time
+                      type: string
+                    snapshotName:
+                      type: string
+                    success:
+                      type: boolean
+                  required:
+                  - pvcName
+                  - restoreTime
+                  - snapshotName
+                  - success
+                  type: object
+                type: array
+              startTime:
+                description: Tempo di inizio del restore
+                format: date-time
                 type: string
             type: object
         required:

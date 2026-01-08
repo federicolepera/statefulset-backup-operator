@@ -8,6 +8,7 @@ rules:
   - backup.sts-backup.io
   resources:
   - statefulsetbackups
+  - statefulsetrestores
   verbs:
   - create
   - delete
@@ -20,12 +21,14 @@ rules:
   - backup.sts-backup.io
   resources:
   - statefulsetbackups/finalizers
+  - statefulsetrestores/finalizers
   verbs:
   - update
 - apiGroups:
   - backup.sts-backup.io
   resources:
   - statefulsetbackups/status
+  - statefulsetrestores/status
   verbs:
   - get
   - patch

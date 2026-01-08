@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the statefulset-backup-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- statefulsetrestore_admin_role.yaml
+- statefulsetrestore_editor_role.yaml
+- statefulsetrestore_viewer_role.yaml
 - statefulsetbackup_admin_role.yaml
 - statefulsetbackup_editor_role.yaml
 - statefulsetbackup_viewer_role.yaml

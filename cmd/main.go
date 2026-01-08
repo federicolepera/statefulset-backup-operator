@@ -35,9 +35,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
+
 	backupv1alpha1 "github.com/federicolepera/statefulset-backup-operator/api/v1alpha1"
 	"github.com/federicolepera/statefulset-backup-operator/internal/controller"
-	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -186,6 +187,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StatefulSetBackup")
+		os.Exit(1)
+	}
+	if err := (&controller.StatefulSetRestoreReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "StatefulSetRestore")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
