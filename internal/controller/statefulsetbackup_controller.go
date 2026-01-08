@@ -116,6 +116,8 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			logger.Error(updateErr, "Failed to update status")
 		}
 
+		r.executePostBackupHook(ctx, sts, backup)
+
 		if err := r.applyRetentionPolicy(ctx, backup); err != nil {
 			logger.Error(err, "Failed to apply retention policy")
 		}
@@ -128,6 +130,73 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	return ctrl.Result{}, nil
+}
+
+//FIX-ME: DUP functions executePreBackupHook executePostBackupHook
+func (r *StatefulSetBackupReconciler) executePostBackupHook(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) (error) {
+	logger := logf.FromContext(ctx)
+	if len(backup.Spec.PostBackupHook.Command) == 0 {
+		logger.Info("No Pre Backup Hook command detected")
+		return nil
+	}
+
+	stsKey := types.NamespacedName {
+		Name: backup.Spec.StatefulSetRef.Name,
+		Namespace: backup.Spec.StatefulSetRef.Namespace,
+	}
+
+	for i := 0; i < int(*sts.Spec.Replicas); i++ {
+		podName := fmt.Sprintf("%s-%d",stsKey.Name,i)
+		podKey := types.NamespacedName{
+			Name: podName,
+			Namespace: backup.Spec.StatefulSetRef.Namespace,
+		}
+		pod := &corev1.Pod{}
+		if err := r.Client.Get(ctx, podKey, pod); err != nil {
+			return fmt.Errorf("Unable to the pod %s. Error: %w", podName, err)
+		}
+
+		//FIX-ME: Add in the CRD the containerName to use for pre-hook-execution
+		containerName := pod.Spec.Containers[0].Name
+
+		//EXEC to first container che hook command
+		req := r.ClientSet.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podKey.Namespace).SubResource("exec")
+		req.VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command: backup.Spec.PreBackupHook.Command,
+			Stdout: true,
+			Stdin: true,
+		}, scheme.ParameterCodec)
+
+		exec, err := remotecommand.NewSPDYExecutor(
+			r.Config,
+			"POST",
+			req.URL(),
+		)
+
+		if err != nil {
+			logger.Error(err, "Error in execution to pod")
+			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+		}
+
+		var stdout, stderr bytes.Buffer
+
+		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			logger.Error(err, "Error in execution to pod")
+			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+		}
+		
+		logger.Info("hook executed",
+			"stdout", stdout.String(),
+			"stderr", stderr.String(),
+		)
+	}
+	
+	return nil
 }
 
 func (r *StatefulSetBackupReconciler) executePreBackupHook(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) (error) {

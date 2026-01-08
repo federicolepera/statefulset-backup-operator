@@ -39,6 +39,13 @@ spec:
           spec:
             description: spec defines the desired state of StatefulSetBackup
             properties:
+              postBackupHook:
+                properties:
+                  command:
+                    items:
+                      type: string
+                    type: array
+                type: object
               preBackupHook:
                 properties:
                   command:

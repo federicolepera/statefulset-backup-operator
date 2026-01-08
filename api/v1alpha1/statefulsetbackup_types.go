@@ -33,7 +33,7 @@ type RetentionPolicy struct {
 	KeepDays *int `json:"keepDays,omitempty"`
 }
 
-type PreBackupHook struct {
+type BackupHook struct {
 	Command []string `json:"command,omitempty"`
 }
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup
@@ -48,7 +48,8 @@ type StatefulSetBackupSpec struct {
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 	RetentionPolicy RetentionPolicy `json:"retentionPolicy,omitempty"`
-	PreBackupHook PreBackupHook `json:"preBackupHook,omitempty"`
+	PreBackupHook BackupHook `json:"preBackupHook,omitempty"`
+	PostBackupHook BackupHook `json:"postBackupHook,omitempty"`
 }
 
 type BackupPhase string
