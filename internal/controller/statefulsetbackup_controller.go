@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -29,6 +30,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubectl/pkg/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,6 +47,8 @@ import (
 type StatefulSetBackupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *rest.Config
+	ClientSet *kubernetes.Clientset
 }
 
 // +kubebuilder:rbac:groups=backup.sts-backup.io,resources=statefulsetbackups,verbs=get;list;watch;create;update;patch;delete
@@ -97,6 +104,8 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if shouldBackup {
 		logger.Info("Creating new backup")
 
+		r.executePreBackupHook(ctx, sts, backup)
+
 		r.createSnapshots(ctx, sts, backup)
 
 		now := metav1.Now()
@@ -121,6 +130,71 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
+func (r *StatefulSetBackupReconciler) executePreBackupHook(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) (error) {
+	logger := logf.FromContext(ctx)
+	if len(backup.Spec.PreBackupHook.Command) == 0 {
+		logger.Info("No Pre Backup Hook command detected")
+		return nil
+	}
+
+	stsKey := types.NamespacedName {
+		Name: backup.Spec.StatefulSetRef.Name,
+		Namespace: backup.Spec.StatefulSetRef.Namespace,
+	}
+
+	for i := 0; i < int(*sts.Spec.Replicas); i++ {
+		podName := fmt.Sprintf("%s-%d",stsKey.Name,i)
+		podKey := types.NamespacedName{
+			Name: podName,
+			Namespace: backup.Spec.StatefulSetRef.Namespace,
+		}
+		pod := &corev1.Pod{}
+		if err := r.Client.Get(ctx, podKey, pod); err != nil {
+			return fmt.Errorf("Unable to the pod %s. Error: %w", podName, err)
+		}
+
+		//FIX-ME: Add in the CRD the containerName to use for pre-hook-execution
+		containerName := pod.Spec.Containers[0].Name
+
+		//EXEC to first container che hook command
+		req := r.ClientSet.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podKey.Namespace).SubResource("exec")
+		req.VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command: backup.Spec.PreBackupHook.Command,
+			Stdout: true,
+			Stdin: true,
+		}, scheme.ParameterCodec)
+
+		exec, err := remotecommand.NewSPDYExecutor(
+			r.Config,
+			"POST",
+			req.URL(),
+		)
+
+		if err != nil {
+			logger.Error(err, "Error in execution to pod")
+			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+		}
+
+		var stdout, stderr bytes.Buffer
+
+		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			logger.Error(err, "Error in execution to pod")
+			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+		}
+		
+		logger.Info("hook executed",
+			"stdout", stdout.String(),
+			"stderr", stderr.String(),
+		)
+	}
+	
+	return nil
+}
 func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup) error {
 	logger := log.FromContext(ctx)
 	
@@ -232,7 +306,7 @@ func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alph
 	return duration
 }
 
-func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup,) ([]backupv1alpha1.SnapshotInfo, error) {
+func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) ([]backupv1alpha1.SnapshotInfo, error) {
 	var snapshots []backupv1alpha1.SnapshotInfo
 
 	logger := log.FromContext(ctx)
@@ -322,6 +396,15 @@ func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.
 }
 // SetupWithManager sets up the controller with the Manager.
 func (r *StatefulSetBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	r.Config = mgr.GetConfig()
+
+	cs, err := kubernetes.NewForConfig(r.Config)
+	if err != nil {
+		return err
+	}
+	r.ClientSet = cs
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&backupv1alpha1.StatefulSetBackup{}).
 		Named("statefulsetbackup").
