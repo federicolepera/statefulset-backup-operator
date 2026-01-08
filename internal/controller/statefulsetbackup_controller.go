@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
@@ -120,28 +121,63 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
-func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,) error {
+func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup) error {
 	logger := log.FromContext(ctx)
 	
-	// Lista tutti i snapshot per questa policy
+	// Lista tutti i snapshot per questa policy NEL NAMESPACE CORRETTO
 	snapshotList := &snapshotv1.VolumeSnapshotList{}
-	if err := r.List(ctx, snapshotList, client.MatchingLabels{
-		"backup.sts-backup.io/policy": backup.Name,
-	}); err != nil {
+	if err := r.List(ctx, snapshotList, 
+		client.MatchingLabels{
+			"backup.sts-backup.io/policy": backup.Name,
+		},
+		client.InNamespace(backup.Spec.StatefulSetRef.Namespace)); err != nil {
 		return err
 	}
 
-	// Se abbiamo più snapshot del limite, elimina i più vecchi
-	if len(snapshotList.Items) > backup.Spec.RetentionPolicy.KeepLast {
-		// Ordina per data di creazione
-		// ... implementazione dell'ordinamento ...
-		
-		toDelete := len(snapshotList.Items) - backup.Spec.RetentionPolicy.KeepLast
+	if len(snapshotList.Items) == 0 {
+		return nil
+	}
+
+	// Raggruppa snapshot per PVC (ogni replica ha il suo PVC)
+	snapshotsByPVC := make(map[string][]snapshotv1.VolumeSnapshot)
+	for _, snapshot := range snapshotList.Items {
+		if snapshot.Spec.Source.PersistentVolumeClaimName != nil {
+			pvcName := *snapshot.Spec.Source.PersistentVolumeClaimName
+			snapshotsByPVC[pvcName] = append(snapshotsByPVC[pvcName], snapshot)
+		}
+	}
+
+	// Per ogni PVC, mantieni solo gli ultimi N snapshot
+	for pvcName, pvcSnapshots := range snapshotsByPVC {
+		if len(pvcSnapshots) <= backup.Spec.RetentionPolicy.KeepLast {
+			continue // Non c'è nulla da cancellare
+		}
+
+		logger.Info("Applying retention policy", 
+			"pvc", pvcName, 
+			"total", len(pvcSnapshots), 
+			"keepLast", backup.Spec.RetentionPolicy.KeepLast)
+
+		// Ordina per data di creazione (dal più vecchio al più recente)
+		sort.Slice(pvcSnapshots, func(i, j int) bool {
+			return pvcSnapshots[i].CreationTimestamp.Before(&pvcSnapshots[j].CreationTimestamp)
+		})
+
+		// Calcola quanti snapshot eliminare
+		toDelete := len(pvcSnapshots) - backup.Spec.RetentionPolicy.KeepLast
+
+		// Elimina i più vecchi
 		for i := 0; i < toDelete; i++ {
-			if err := r.Delete(ctx, &snapshotList.Items[i]); err != nil {
-				logger.Error(err, "Failed to delete old snapshot")
+			snapshot := &pvcSnapshots[i]
+			logger.Info("Deleting old snapshot", 
+				"snapshot", snapshot.Name, 
+				"pvc", pvcName,
+				"age", time.Since(snapshot.CreationTimestamp.Time))
+			
+			if err := r.Delete(ctx, snapshot); err != nil {
+				logger.Error(err, "Failed to delete old snapshot", "snapshot", snapshot.Name)
 			} else {
-				logger.Info("Deleted old snapshot", "snapshot", snapshotList.Items[i].Name)
+				logger.Info("Deleted old snapshot", "snapshot", snapshot.Name)
 			}
 		}
 	}
@@ -216,7 +252,8 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 				continue
 			}
 
-			snapshotName := fmt.Sprintf("%s-%s-%d", backup.Name, vct.Name, time.Now().Unix())
+			snapshotName := fmt.Sprintf("%s-%s-%d-%d", backup.Name, vct.Name, time.Now().Unix(), i)
+			snapshotClassName := "csi-hostpath-snapclass"
 			snapshot := &snapshotv1.VolumeSnapshot{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: snapshotName,
@@ -230,6 +267,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 					Source: snapshotv1.VolumeSnapshotSource{
 						PersistentVolumeClaimName: &pvcName,
 					},
+				VolumeSnapshotClassName: &snapshotClassName,
 				},
 			}
 
