@@ -27,6 +27,7 @@ import (
 	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,7 +73,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "ciao")
+		logger.Error(err, "Unable to fetch StatefulSetBackup")
 		return ctrl.Result{}, err
 	}
 
@@ -84,20 +85,14 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if err := r.Get(ctx, stsKey, sts); err != nil {
 		logger.Error(err, "Unable to get StatefulSet")
-		backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
-		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
-			logger.Error(updateErr, "Failed to update status")
-		}
+		r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error())
 		return ctrl.Result{}, err
 	}
 
 	shouldBackup, err := r.shouldCreateBackup(backup)
 	if err != nil {
-		logger.Error(err, "")
-		backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
-		if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
-			logger.Error(updateErr, "Failed to update status")
-		}
+		logger.Error(err, "Error evaluating schedule")
+		r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -106,10 +101,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PreBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute pre-backup hook")
-			backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
-			if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
-				logger.Error(updateErr, "Failed to update status")
-			}
+			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PreBackupHookError", err.Error())
 			return ctrl.Result{}, err
 		}
 
@@ -125,15 +117,14 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PostBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute post-backup hook")
-			backup.Status.Phase = backupv1alpha1.BackupPhaseFailed
-			if updateErr := r.Status().Update(ctx, backup); updateErr != nil {
-				logger.Error(updateErr, "Failed to update status")
-			}
+			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PostBackupHookError", err.Error())
 			return ctrl.Result{}, err
 		}
 
 		if err := r.applyRetentionPolicy(ctx, backup); err != nil {
 			logger.Error(err, "Failed to apply retention policy")
+			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "RetentionPolicyError", err.Error())
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -427,4 +418,17 @@ func (r *StatefulSetBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&backupv1alpha1.StatefulSetBackup{}).
 		Named("statefulsetbackup").
 		Complete(r)
+}
+
+func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) {
+	backup.Status.Phase = phase
+	meta.SetStatusCondition(&backup.Status.Conditions, metav1.Condition{
+		Type:               string(phase),
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: backup.Generation,
+	})
+	// FIX ME: CHECK UPDATE ERROR
+	r.Status().Update(ctx, backup)
 }
