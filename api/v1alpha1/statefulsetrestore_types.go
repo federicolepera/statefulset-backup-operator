@@ -20,75 +20,88 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// StatefulSetRestoreSpec definisce come fare il restore
+// StatefulSetRestoreSpec defines how to perform the restore operation.
 type StatefulSetRestoreSpec struct {
-	// Riferimento allo StatefulSet da ripristinare
+	// StatefulSetRef references the StatefulSet to restore
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef"`
-	
-	// Nome del backup da cui ripristinare
-	// Se non specificato, usa l'ultimo backup disponibile
+
+	// BackupName specifies the name of the backup to restore from
+	// If not specified, use UseLatestBackup instead
 	// +optional
 	BackupName string `json:"backupName,omitempty"`
-	
-	// Restore dal backup più recente
-	// Se true, ignora BackupName e usa l'ultimo backup disponibile
+
+	// UseLatestBackup restores from the most recent backup
+	// If true, ignores BackupName and uses the latest available backup
 	// +optional
 	UseLatestBackup bool `json:"useLatestBackup,omitempty"`
-	
-	// Lista specifica di snapshot da ripristinare (uno per PVC)
-	// Esempio: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]
-	// Utile per restore selettivo (es: ripristina solo il PVC del pod-0)
-	// Se non specificata, ripristina tutti i PVC dello StatefulSet
+
+	// SnapshotNames specifies a list of specific snapshots to restore (one per PVC)
+	// Example: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]
+	// Useful for selective restore (e.g., restore only pod-0's PVC)
+	// If not specified, restores all PVCs of the StatefulSet
 	// +optional
 	SnapshotNames []string `json:"snapshotNames,omitempty"`
-	
-	// Se true, scala lo StatefulSet a 0 prima del restore
-	// Default: true (consigliato per consistenza)
+
+	// ScaleDown determines whether to scale the StatefulSet to 0 before restore
+	// Default: true (recommended for consistency)
 	// +optional
 	ScaleDown *bool `json:"scaleDown,omitempty"`
 }
 
-// StatefulSetRestoreStatus definisce lo stato del restore
+// StatefulSetRestoreStatus defines the observed state of the restore operation.
 type StatefulSetRestoreStatus struct {
-	// Fase corrente del restore
+	// Phase represents the current phase of the restore operation
+	// +optional
 	Phase RestorePhase `json:"phase,omitempty"`
-	
-	// Condizioni dello stato del restore
+
+	// Conditions represent the current state of the restore resource
+	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	
-	// Tempo di inizio del restore
+
+	// StartTime is when the restore operation started
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
-	
-	// Tempo di completamento del restore
+
+	// CompletionTime is when the restore operation completed
 	// +optional
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-	
-	// Snapshot ripristinati
+
+	// RestoredSnapshots contains information about restored snapshots
+	// +optional
 	RestoredSnapshots []RestoredSnapshotInfo `json:"restoredSnapshots,omitempty"`
-	
-	// Numero di repliche originali (per scale up dopo restore)
+
+	// OriginalReplicas stores the original replica count (used for scaling up after restore)
+	// +optional
 	OriginalReplicas *int32 `json:"originalReplicas,omitempty"`
 }
 
+// RestoredSnapshotInfo contains information about a restored snapshot.
 type RestoredSnapshotInfo struct {
+	// SnapshotName is the name of the snapshot that was restored
 	SnapshotName string      `json:"snapshotName"`
+	// PVCName is the name of the PVC that was restored
 	PVCName      string      `json:"pvcName"`
+	// RestoreTime is when the snapshot was restored
 	RestoreTime  metav1.Time `json:"restoreTime"`
+	// Success indicates whether the restore was successful
 	Success      bool        `json:"success"`
 }
 
+// RestorePhase represents the current phase of a restore operation.
 type RestorePhase string
 
 const (
+	// RestorePhaseNew indicates a newly created restore resource
 	RestorePhaseNew        RestorePhase = "New"
+	// RestorePhaseScalingDown indicates the StatefulSet is being scaled down to 0
 	RestorePhaseScalingDown RestorePhase = "ScalingDown"
+	// RestorePhaseRestoring indicates PVCs are being restored from snapshots
 	RestorePhaseRestoring  RestorePhase = "Restoring"
+	// RestorePhaseScalingUp indicates the StatefulSet is being scaled back up
 	RestorePhaseScalingUp  RestorePhase = "ScalingUp"
+	// RestorePhaseCompleted indicates the restore completed successfully
 	RestorePhaseCompleted  RestorePhase = "Completed"
+	// RestorePhaseFailed indicates the restore failed
 	RestorePhaseFailed     RestorePhase = "Failed"
 )
 // +kubebuilder:object:root=true

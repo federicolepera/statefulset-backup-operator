@@ -20,77 +20,94 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
+// StatefulSetRef references a StatefulSet resource in a specific namespace.
 type StatefulSetRef struct {
+	// Name of the StatefulSet
 	Name string `json:"name,omitempty"`
+	// Namespace where the StatefulSet is located
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// RetentionPolicy defines how long backups should be retained.
 type RetentionPolicy struct {
+	// KeepLast specifies how many recent backups to keep per PVC
 	KeepLast int `json:"keepLast"`
+	// KeepDays specifies how many days to keep backups (optional, not yet implemented)
+	// +optional
 	KeepDays *int `json:"keepDays,omitempty"`
 }
 
+// BackupHook defines a command to execute during backup operations.
 type BackupHook struct {
+	// Command is the array of command and arguments to execute
 	Command []string `json:"command,omitempty"`
 }
-// StatefulSetBackupSpec defines the desired state of StatefulSetBackup
+// StatefulSetBackupSpec defines the desired state of StatefulSetBackup.
 type StatefulSetBackupSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go to remove/update
+	// StatefulSetRef references the StatefulSet to backup
 	// +optional
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
+
+	// Schedule is a cron expression for scheduled backups (e.g., "0 2 * * *" for daily at 2 AM)
+	// If empty, the backup is created only once manually
+	// +optional
 	Schedule string `json:"schedule,omitempty"`
+
+	// RetentionPolicy specifies how many backups to keep
+	// +optional
 	RetentionPolicy RetentionPolicy `json:"retentionPolicy,omitempty"`
+
+	// PreBackupHook defines a command to execute before taking the backup
+	// Useful for flushing caches, creating consistent snapshots, etc.
+	// +optional
 	PreBackupHook BackupHook `json:"preBackupHook,omitempty"`
+
+	// PostBackupHook defines a command to execute after taking the backup
+	// Useful for cleanup or notifications
+	// +optional
 	PostBackupHook BackupHook `json:"postBackupHook,omitempty"`
 }
 
+// BackupPhase represents the current phase of a backup operation.
 type BackupPhase string
 
 const (
+	// BackupPhaseReady indicates the backup is ready and completed successfully
 	BackupPhaseReady      BackupPhase = "Ready"
+	// BackupPhaseInProgress indicates the backup is currently in progress
 	BackupPhaseInProgress BackupPhase = "InProgress"
+	// BackupPhaseFailed indicates the backup failed
 	BackupPhaseFailed     BackupPhase = "Failed"
 )
 // StatefulSetBackupStatus defines the observed state of StatefulSetBackup.
 type StatefulSetBackupStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the StatefulSetBackup resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// Conditions represent the current state of the backup resource.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// Phase represents the current phase of the backup operation
+	// +optional
 	Phase BackupPhase `json:"phase,omitempty"`
 
+	// LastBackupTime is the timestamp of the most recent backup
+	// +optional
 	LastBackupTime metav1.Time `json:"lastBackupTime,omitempty"`
 }
 
+// SnapshotInfo contains information about a volume snapshot.
 type SnapshotInfo struct {
+	// Name of the VolumeSnapshot resource
 	Name         string      `json:"name"`
+	// CreationTime is when the snapshot was created
 	CreationTime metav1.Time `json:"creationTime"`
+	// PVCName is the name of the PVC that was snapshotted
 	PVCName      string      `json:"pvcName"`
+	// Size is the size of the snapshot (optional)
+	// +optional
 	Size         string      `json:"size,omitempty"`
+	// ReadyToUse indicates if the snapshot is ready to be used for restore
 	ReadyToUse   bool        `json:"readyToUse"`
 }
 
