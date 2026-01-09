@@ -160,10 +160,10 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 			return fmt.Errorf("Unable to the pod %s. Error: %w", podName, err)
 		}
 
-		//FIX-ME: Add in the CRD the containerName to use for pre-hook-execution
+		// FIX-ME: Add in the CRD the containerName to use for pre-hook-execution
 		containerName := pod.Spec.Containers[0].Name
 
-		//EXEC to first container che hook command
+		// Execute the hook command on the first container
 		req := r.ClientSet.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podKey.Namespace).SubResource("exec")
 		req.VersionedParams(&corev1.PodExecOptions{
 			Container: containerName,
@@ -210,8 +210,8 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 // according to the configured retention policy.
 func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup) error {
 	logger := log.FromContext(ctx)
-	
-	// Lista tutti i snapshot per questa policy NEL NAMESPACE CORRETTO
+
+	// List all snapshots for this policy in the correct namespace
 	snapshotList := &snapshotv1.VolumeSnapshotList{}
 	if err := r.List(ctx, snapshotList, 
 		client.MatchingLabels{
@@ -225,7 +225,7 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 		return nil
 	}
 
-	// Raggruppa snapshot per PVC (ogni replica ha il suo PVC)
+	// Group snapshots by PVC (each replica has its own PVC)
 	snapshotsByPVC := make(map[string][]snapshotv1.VolumeSnapshot)
 	for _, snapshot := range snapshotList.Items {
 		if snapshot.Spec.Source.PersistentVolumeClaimName != nil {
@@ -234,10 +234,10 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 		}
 	}
 
-	// Per ogni PVC, mantieni solo gli ultimi N snapshot
+	// For each PVC, keep only the last N snapshots
 	for pvcName, pvcSnapshots := range snapshotsByPVC {
 		if len(pvcSnapshots) <= backup.Spec.RetentionPolicy.KeepLast {
-			continue // Non c'è nulla da cancellare
+			continue
 		}
 
 		logger.Info("Applying retention policy", 
@@ -245,15 +245,15 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 			"total", len(pvcSnapshots), 
 			"keepLast", backup.Spec.RetentionPolicy.KeepLast)
 
-		// Ordina per data di creazione (dal più vecchio al più recente)
+		// Sort by creation date (oldest to newest)
 		sort.Slice(pvcSnapshots, func(i, j int) bool {
 			return pvcSnapshots[i].CreationTimestamp.Before(&pvcSnapshots[j].CreationTimestamp)
 		})
 
-		// Calcola quanti snapshot eliminare
+		// Calculate how many snapshots to delete
 		toDelete := len(pvcSnapshots) - backup.Spec.RetentionPolicy.KeepLast
 
-		// Elimina i più vecchi
+		// Delete the oldest snapshots
 		for i := 0; i < toDelete; i++ {
 			snapshot := &pvcSnapshots[i]
 			logger.Info("Deleting old snapshot", 
@@ -278,7 +278,6 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 // If the next scheduled time is in the past, it returns 10 seconds to trigger immediately.
 // The maximum requeue duration is capped at 1 hour for safety.
 func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alpha1.StatefulSetBackup) time.Duration {
-	// Se non c'è schedule, non c'è bisogno di requeue
 	if backup.Spec.Schedule == "" {
 		return 0
 	}
@@ -286,7 +285,7 @@ func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alph
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	schedule, err := parser.Parse(backup.Spec.Schedule)
 	if err != nil {
-		// Se lo schedule è invalido, riprova tra 1 minuto
+		// If schedule is invalid, retry in 1 minute
 		return 1 * time.Minute
 	}
 
@@ -294,29 +293,23 @@ func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alph
 	var nextScheduled time.Time
 
 	if backup.Status.LastBackupTime.IsZero() {
-		// Se non c'è mai stato un backup, il prossimo è già "ora"
 		return 10 * time.Second
 	}
 
-	// Calcola il prossimo backup dopo l'ultimo
 	lastBackup := backup.Status.LastBackupTime.Time
 	nextScheduled = schedule.Next(lastBackup)
 
-	// Se il prossimo backup è nel passato (perché il controller era down),
-	// dovrebbe essere eseguito subito
+	// If next backup is in the past (controller was down), execute immediately
 	if nextScheduled.Before(now) || nextScheduled.Equal(now) {
 		return 10 * time.Second
 	}
 
-	// Altrimenti calcola quanto tempo manca
 	duration := time.Until(nextScheduled)
 
-	// Aggiungi un piccolo buffer per evitare di arrivare troppo presto
-	// e controlla qualche secondo dopo l'orario previsto
+	// Add a small buffer to avoid arriving too early
 	duration += 30 * time.Second
 
-	// Limita il requeue massimo a 1 ora per sicurezza
-	// (così se c'è un problema, non aspettiamo giorni)
+	// Limit maximum requeue to 1 hour for safety
 	if duration > 1*time.Hour {
 		return 1 * time.Hour
 	}
@@ -368,7 +361,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 				},
 			}
 
-			//Per ora non possibile inserire la snapshotclass quindi settata di default
+			// FIX-ME: Currently not possible to specify snapshot class, using default
 			if err := r.Create(ctx, snapshot); err != nil {
 				logger.Error(err, "Failed to create snapshot", "snapshot", snapshotName)
 				return nil, err
@@ -393,7 +386,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 // is past the next scheduled backup time based on the last backup timestamp.
 // Returns true if a backup should be created, false otherwise.
 func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.StatefulSetBackup) (bool, error) {
-	// Se non c'è schedule, backup manuale (creato solo alla creazione della risorsa)
+	// If no schedule, manual backup (created only once at resource creation)
 	if backup.Spec.Schedule == "" {
 		if backup.Status.LastBackupTime.IsZero() {
 			return true, nil
