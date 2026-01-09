@@ -137,7 +137,11 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
-//FIX-ME: DUP functions executePreBackupHook executePostBackupHook
+// executeBackupHook executes a command on all pods of a StatefulSet.
+// It is used for both pre-backup and post-backup hooks.
+// The function iterates through all replicas of the StatefulSet and executes
+// the provided command in the first container of each pod using the Kubernetes exec API.
+// Returns an error if the command execution fails on any pod.
 func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup, command []string, ) (error) {
 	logger := logf.FromContext(ctx)
 	if len(command) == 0 {
@@ -204,6 +208,11 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 	return nil
 }
 
+// applyRetentionPolicy enforces the retention policy for volume snapshots.
+// It lists all snapshots associated with the backup policy, groups them by PVC,
+// and deletes the oldest snapshots to keep only the specified number (KeepLast)
+// for each PVC. This ensures that old backups are automatically cleaned up
+// according to the configured retention policy.
 func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup) error {
 	logger := log.FromContext(ctx)
 	
@@ -268,6 +277,11 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 	return nil
 }
 
+// calculateRequeueAfter determines when the next reconciliation should occur.
+// It parses the cron schedule from the backup spec and calculates the duration
+// until the next scheduled backup. If no schedule is defined, it returns 0 (no requeue).
+// If the next scheduled time is in the past, it returns 10 seconds to trigger immediately.
+// The maximum requeue duration is capped at 1 hour for safety.
 func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alpha1.StatefulSetBackup) time.Duration {
 	// Se non c'è schedule, non c'è bisogno di requeue
 	if backup.Spec.Schedule == "" {
@@ -315,6 +329,11 @@ func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alph
 	return duration
 }
 
+// createSnapshots creates volume snapshots for all PVCs in the StatefulSet.
+// It iterates through all volume claim templates and replicas, creates a VolumeSnapshot
+// resource for each PVC, and returns a list of snapshot information.
+// Each snapshot is labeled with the StatefulSet name and backup policy name
+// for easy identification and management.
 func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) ([]backupv1alpha1.SnapshotInfo, error) {
 	var snapshots []backupv1alpha1.SnapshotInfo
 
@@ -373,6 +392,11 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 
 	return snapshots, nil
 }
+// shouldCreateBackup determines whether a backup should be created at this time.
+// For manual backups (no schedule), it returns true only if no backup has been taken yet.
+// For scheduled backups, it parses the cron expression and checks if the current time
+// is past the next scheduled backup time based on the last backup timestamp.
+// Returns true if a backup should be created, false otherwise.
 func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.StatefulSetBackup) (bool, error) {
 	// Se non c'è schedule, backup manuale (creato solo alla creazione della risorsa)
 	if backup.Spec.Schedule == "" {
@@ -403,6 +427,24 @@ func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.
 		return false, nil
 	}
 }
+
+// updateRestoreStatus updates the status phase and conditions of a backup resource.
+// It sets the backup phase, adds or updates a status condition with the provided
+// reason and message, and persists the changes to the Kubernetes API server.
+// This function is typically called when an error occurs or when the backup state changes.
+func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) {
+	backup.Status.Phase = phase
+	meta.SetStatusCondition(&backup.Status.Conditions, metav1.Condition{
+		Type:               string(phase),
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: backup.Generation,
+	})
+	// FIX ME: CHECK UPDATE ERROR
+	r.Status().Update(ctx, backup)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *StatefulSetBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
@@ -418,17 +460,4 @@ func (r *StatefulSetBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&backupv1alpha1.StatefulSetBackup{}).
 		Named("statefulsetbackup").
 		Complete(r)
-}
-
-func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) {
-	backup.Status.Phase = phase
-	meta.SetStatusCondition(&backup.Status.Conditions, metav1.Condition{
-		Type:               string(phase),
-		Status:             metav1.ConditionTrue,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: backup.Generation,
-	})
-	// FIX ME: CHECK UPDATE ERROR
-	r.Status().Update(ctx, backup)
 }
