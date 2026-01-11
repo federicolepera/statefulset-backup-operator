@@ -259,7 +259,7 @@ func (r *StatefulSetRestoreReconciler) handleScalingDown(ctx context.Context, re
 		*sts.Spec.Replicas = 0
 		if err := r.Update(ctx, sts); err != nil {
 			r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhase(backupv1alpha1.BackupPhaseFailed), "StatefulSet not sclaed down", "Unable to scaling down StatefulSet "+ sts.GetName())
-			return ctrl.Result{}, fmt.Errorf("Unable to scaling down StatefulSet " + sts.GetName())
+			return ctrl.Result{}, fmt.Errorf("Unable to scaling down StatefulSet %s", sts.GetName())
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
