@@ -41,6 +41,9 @@ type RetentionPolicy struct {
 type BackupHook struct {
 	// Command is the array of command and arguments to execute
 	Command []string `json:"command,omitempty"`
+	// ContainerName specifies the container in which to run the command (optional)	
+	// +optional
+	ContainerName string   `json:"containerName,omitempty"`
 }
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup.
 type StatefulSetBackupSpec struct {

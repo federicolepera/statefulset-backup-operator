@@ -40,37 +40,64 @@ spec:
             description: spec defines the desired state of StatefulSetBackup
             properties:
               postBackupHook:
+                description: |-
+                  PostBackupHook defines a command to execute after taking the backup
+                  Useful for cleanup or notifications
                 properties:
                   command:
+                    description: Command is the array of command and arguments to
+                      execute
                     items:
                       type: string
                     type: array
+                  containerName:
+                    description: ContainerName specifies the container in which to
+                      run the command (optional)
+                    type: string
                 type: object
               preBackupHook:
+                description: |-
+                  PreBackupHook defines a command to execute before taking the backup
+                  Useful for flushing caches, creating consistent snapshots, etc.
                 properties:
                   command:
+                    description: Command is the array of command and arguments to
+                      execute
                     items:
                       type: string
                     type: array
+                  containerName:
+                    description: ContainerName specifies the container in which to
+                      run the command (optional)
+                    type: string
                 type: object
               retentionPolicy:
+                description: RetentionPolicy specifies how many backups to keep
                 properties:
                   keepDays:
+                    description: KeepDays specifies how many days to keep backups
+                      (optional, not yet implemented)
                     type: integer
                   keepLast:
+                    description: KeepLast specifies how many recent backups to keep
+                      per PVC
                     type: integer
                 required:
                 - keepLast
                 type: object
               schedule:
+                description: |-
+                  Schedule is a cron expression for scheduled backups (e.g., "0 2 * * *" for daily at 2 AM)
+                  If empty, the backup is created only once manually
                 type: string
               statefulSetRef:
-                description: foo is an example field of StatefulSetBackup. Edit statefulsetbackup_types.go
-                  to remove/update
+                description: StatefulSetRef references the StatefulSet to backup
                 properties:
                   name:
+                    description: Name of the StatefulSet
                     type: string
                   namespace:
+                    description: Namespace where the StatefulSet is located
                     type: string
                 type: object
             type: object
@@ -78,16 +105,8 @@ spec:
             description: status defines the observed state of StatefulSetBackup
             properties:
               conditions:
-                description: |-
-                  conditions represent the current state of the StatefulSetBackup resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                description: Conditions represent the current state of the backup
+                  resource.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -147,9 +166,11 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               lastBackupTime:
+                description: LastBackupTime is the timestamp of the most recent backup
                 format: date-time
                 type: string
               phase:
+                description: Phase represents the current phase of the backup operation
                 type: string
             type: object
         required:
