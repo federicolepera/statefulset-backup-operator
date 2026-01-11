@@ -160,8 +160,12 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 			return fmt.Errorf("Unable to the pod %s. Error: %w", podName, err)
 		}
 
-		// FIX-ME: Add in the CRD the containerName to use for pre-hook-execution
-		containerName := pod.Spec.Containers[0].Name
+		// Use specified container name or default to first container
+		// If no container name is specified, use the first container
+		if backup.Spec.PreBackupHook.ContainerName == "" {
+			backup.Spec.PreBackupHook.ContainerName = pod.Spec.Containers[0].Name
+		}
+		containerName := backup.Spec.PreBackupHook.ContainerName
 
 		// Execute the hook command on the first container
 		req := r.ClientSet.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podKey.Namespace).SubResource("exec")

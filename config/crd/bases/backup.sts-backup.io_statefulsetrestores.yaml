@@ -42,35 +42,37 @@ spec:
             properties:
               backupName:
                 description: |-
-                  Nome del backup da cui ripristinare
-                  Se non specificato, usa l'ultimo backup disponibile
+                  BackupName specifies the name of the backup to restore from
+                  If not specified, use UseLatestBackup instead
                 type: string
               scaleDown:
                 description: |-
-                  Se true, scala lo StatefulSet a 0 prima del restore
-                  Default: true (consigliato per consistenza)
+                  ScaleDown determines whether to scale the StatefulSet to 0 before restore
+                  Default: true (recommended for consistency)
                 type: boolean
               snapshotNames:
                 description: |-
-                  Lista specifica di snapshot da ripristinare (uno per PVC)
-                  Esempio: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]
-                  Utile per restore selettivo (es: ripristina solo il PVC del pod-0)
-                  Se non specificata, ripristina tutti i PVC dello StatefulSet
+                  SnapshotNames specifies a list of specific snapshots to restore (one per PVC)
+                  Example: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]
+                  Useful for selective restore (e.g., restore only pod-0's PVC)
+                  If not specified, restores all PVCs of the StatefulSet
                 items:
                   type: string
                 type: array
               statefulSetRef:
-                description: Riferimento allo StatefulSet da ripristinare
+                description: StatefulSetRef references the StatefulSet to restore
                 properties:
                   name:
+                    description: Name of the StatefulSet
                     type: string
                   namespace:
+                    description: Namespace where the StatefulSet is located
                     type: string
                 type: object
               useLatestBackup:
                 description: |-
-                  Restore dal backup più recente
-                  Se true, ignora BackupName e usa l'ultimo backup disponibile
+                  UseLatestBackup restores from the most recent backup
+                  If true, ignores BackupName and uses the latest available backup
                 type: boolean
             required:
             - statefulSetRef
@@ -79,11 +81,12 @@ spec:
             description: status defines the observed state of StatefulSetRestore
             properties:
               completionTime:
-                description: Tempo di completamento del restore
+                description: CompletionTime is when the restore operation completed
                 format: date-time
                 type: string
               conditions:
-                description: Condizioni dello stato del restore
+                description: Conditions represent the current state of the restore
+                  resource
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -140,24 +143,33 @@ spec:
                   type: object
                 type: array
               originalReplicas:
-                description: Numero di repliche originali (per scale up dopo restore)
+                description: OriginalReplicas stores the original replica count (used
+                  for scaling up after restore)
                 format: int32
                 type: integer
               phase:
-                description: Fase corrente del restore
+                description: Phase represents the current phase of the restore operation
                 type: string
               restoredSnapshots:
-                description: Snapshot ripristinati
+                description: RestoredSnapshots contains information about restored
+                  snapshots
                 items:
+                  description: RestoredSnapshotInfo contains information about a restored
+                    snapshot.
                   properties:
                     pvcName:
+                      description: PVCName is the name of the PVC that was restored
                       type: string
                     restoreTime:
+                      description: RestoreTime is when the snapshot was restored
                       format: date-time
                       type: string
                     snapshotName:
+                      description: SnapshotName is the name of the snapshot that was
+                        restored
                       type: string
                     success:
+                      description: Success indicates whether the restore was successful
                       type: boolean
                   required:
                   - pvcName
@@ -167,7 +179,7 @@ spec:
                   type: object
                 type: array
               startTime:
-                description: Tempo di inizio del restore
+                description: StartTime is when the restore operation started
                 format: date-time
                 type: string
             type: object
