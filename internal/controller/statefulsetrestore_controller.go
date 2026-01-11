@@ -134,7 +134,7 @@ func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, rest
 	logger := logf.FromContext(ctx)
 	for _, snapshot := range snapshots {
 		if snapshot.Spec.Source.PersistentVolumeClaimName == nil {
-			return fmt.Errorf("Snapshot " + snapshot.Name + " has no PVC bounded")
+			return fmt.Errorf("Snapshot %s has no PVC bounded", snapshot.Name)
 		}
 		pvcName := snapshot.Spec.Source.PersistentVolumeClaimName
 		existingPVC := corev1.PersistentVolumeClaim{}
@@ -145,12 +145,12 @@ func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, rest
 		// Get the PVC associated with the snapshot
 		if err := r.Get(ctx, pvcKey, &existingPVC); err != nil {
 			logger.Error(err, "Failed to get PVC " + pvcKey.Name + "from snapshot " + snapshot.Name)
-			return err
+			return fmt.Errorf("Failed to ghe PVC %s. Err: %w", pvcKey.Name, err)
 		}
 		// Delete the existing PVC
 		if err := r.Delete(ctx, &existingPVC); err != nil {
 			logger.Error(err, "Failed to delete PVC " + pvcKey.Name + "from snapshot " + snapshot.Name)
-			return err
+			return fmt.Errorf("Failed to delete PVC %s from snapshot %s. Err: %w", pvcKey.Name, snapshot.Name, err)
 		}
 
 		// Wait for PVC deletion to complete
