@@ -78,13 +78,13 @@ type StatefulSetRestoreStatus struct {
 // RestoredSnapshotInfo contains information about a restored snapshot.
 type RestoredSnapshotInfo struct {
 	// SnapshotName is the name of the snapshot that was restored
-	SnapshotName string      `json:"snapshotName"`
+	SnapshotName string `json:"snapshotName"`
 	// PVCName is the name of the PVC that was restored
-	PVCName      string      `json:"pvcName"`
+	PVCName string `json:"pvcName"`
 	// RestoreTime is when the snapshot was restored
-	RestoreTime  metav1.Time `json:"restoreTime"`
+	RestoreTime metav1.Time `json:"restoreTime"`
 	// Success indicates whether the restore was successful
-	Success      bool        `json:"success"`
+	Success bool `json:"success"`
 }
 
 // RestorePhase represents the current phase of a restore operation.
