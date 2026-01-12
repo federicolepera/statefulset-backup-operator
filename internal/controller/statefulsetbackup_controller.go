@@ -80,14 +80,20 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if err := r.Get(ctx, stsKey, sts); err != nil {
 		logger.Error(err, "Unable to get StatefulSet")
-		r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error())
+		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error()); err != nil {
+			logger.Error(err_update, "Failed to update backup status")
+			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+		}
 		return ctrl.Result{}, err
 	}
 
 	shouldBackup, err := r.shouldCreateBackup(backup)
 	if err != nil {
 		logger.Error(err, "Error evaluating schedule")
-		r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error())
+		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error()); err_update != nil {
+			logger.Error(err_update, "Failed to update backup status")
+			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -96,14 +102,20 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PreBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute pre-backup hook")
-			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PreBackupHookError", err.Error())
+			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PreBackupHookError", err.Error()); err_update != nil {
+				logger.Error(err_update, "Failed to update backup status")
+				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+			}
 			return ctrl.Result{}, err
 		}
 
 		_, err := r.createSnapshots(ctx, sts, backup)
 		if err != nil {
 			logger.Error(err, "Failed to create snapshots")
-			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "SnapshotCreationError", err.Error())
+			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "SnapshotCreationError", err.Error()); err_update != nil {
+				logger.Error(err_update, "Failed to update backup status")
+				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+			}
 			return ctrl.Result{}, err
 		}
 
@@ -117,13 +129,19 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PostBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute post-backup hook")
-			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PostBackupHookError", err.Error())
+			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PostBackupHookError", err.Error()); err_update != nil {
+				logger.Error(err_update, "Failed to update backup status")
+				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+			}
 			return ctrl.Result{}, err
 		}
 
 		if err := r.applyRetentionPolicy(ctx, backup); err != nil {
 			logger.Error(err, "Failed to apply retention policy")
-			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "RetentionPolicyError", err.Error())
+			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "RetentionPolicyError", err.Error()); err_update != nil {
+				logger.Error(err_update, "Failed to update backup status")
+				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -429,7 +447,8 @@ func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.
 // It sets the backup phase, adds or updates a status condition with the provided
 // reason and message, and persists the changes to the Kubernetes API server.
 // This function is typically called when an error occurs or when the backup state changes.
-func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) {
+func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) error {
+	logger := log.FromContext(ctx)
 	backup.Status.Phase = phase
 	meta.SetStatusCondition(&backup.Status.Conditions, metav1.Condition{
 		Type:               string(phase),
@@ -438,8 +457,11 @@ func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,ba
 		Message:            message,
 		ObservedGeneration: backup.Generation,
 	})
-	// FIX ME: CHECK UPDATE ERROR
-	r.Status().Update(ctx, backup)
+	if err := r.Status().Update(ctx, backup); err != nil {
+		logger.Error(err, "Failed to update backup status")
+		return fmt.Errorf("failed to update backup status: %w", err)
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
