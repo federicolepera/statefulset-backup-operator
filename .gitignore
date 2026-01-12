@@ -28,3 +28,4 @@ go.work
 cr.yml
 statefulset.yaml
 restore-cr.yml
+redis.yaml
