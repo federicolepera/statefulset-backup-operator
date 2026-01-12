@@ -78,13 +78,13 @@ type StatefulSetRestoreStatus struct {
 // RestoredSnapshotInfo contains information about a restored snapshot.
 type RestoredSnapshotInfo struct {
 	// SnapshotName is the name of the snapshot that was restored
-	SnapshotName string      `json:"snapshotName"`
+	SnapshotName string `json:"snapshotName"`
 	// PVCName is the name of the PVC that was restored
-	PVCName      string      `json:"pvcName"`
+	PVCName string `json:"pvcName"`
 	// RestoreTime is when the snapshot was restored
-	RestoreTime  metav1.Time `json:"restoreTime"`
+	RestoreTime metav1.Time `json:"restoreTime"`
 	// Success indicates whether the restore was successful
-	Success      bool        `json:"success"`
+	Success bool `json:"success"`
 }
 
 // RestorePhase represents the current phase of a restore operation.
@@ -92,18 +92,19 @@ type RestorePhase string
 
 const (
 	// RestorePhaseNew indicates a newly created restore resource
-	RestorePhaseNew        RestorePhase = "New"
+	RestorePhaseNew RestorePhase = "New"
 	// RestorePhaseScalingDown indicates the StatefulSet is being scaled down to 0
 	RestorePhaseScalingDown RestorePhase = "ScalingDown"
 	// RestorePhaseRestoring indicates PVCs are being restored from snapshots
-	RestorePhaseRestoring  RestorePhase = "Restoring"
+	RestorePhaseRestoring RestorePhase = "Restoring"
 	// RestorePhaseScalingUp indicates the StatefulSet is being scaled back up
-	RestorePhaseScalingUp  RestorePhase = "ScalingUp"
+	RestorePhaseScalingUp RestorePhase = "ScalingUp"
 	// RestorePhaseCompleted indicates the restore completed successfully
-	RestorePhaseCompleted  RestorePhase = "Completed"
+	RestorePhaseCompleted RestorePhase = "Completed"
 	// RestorePhaseFailed indicates the restore failed
-	RestorePhaseFailed     RestorePhase = "Failed"
+	RestorePhaseFailed RestorePhase = "Failed"
 )
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
