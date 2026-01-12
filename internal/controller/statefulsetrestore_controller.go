@@ -62,7 +62,6 @@ func (r *StatefulSetRestoreReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-
 	// If restore is already completed or failed, do nothing
 	if restore.Status.Phase == backupv1alpha1.RestorePhaseCompleted || restore.Status.Phase == backupv1alpha1.RestorePhaseFailed {
 		return ctrl.Result{}, nil
@@ -77,7 +76,10 @@ func (r *StatefulSetRestoreReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if err := r.Get(ctx, stsKey, sts); err != nil {
 		logger.Error(err, "Failed to get StatefulSet")
-		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "StatefulSetNotFound", fmt.Sprintf("StatefulSet not found %v", err))
+		if err_update := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "StatefulSetNotFound", fmt.Sprintf("StatefulSet not found %v", err)); err_update != nil {
+			logger.Error(err_update, "Failed to update restore status")
+			err = fmt.Errorf("err %w - failed to update restore status. Err: %w", err, err_update)
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -98,9 +100,9 @@ func (r *StatefulSetRestoreReconciler) Reconcile(ctx context.Context, req ctrl.R
 // findSnapshotToRestore locates the volume snapshots to use for restoration.
 // It searches for snapshots based on either the specified backup name or the latest backup
 // for the StatefulSet. Returns a list of snapshots matching the restore criteria.
-func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore) ([]snapshotv1.VolumeSnapshot, error){
+func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore) ([]snapshotv1.VolumeSnapshot, error) {
 	logger := logf.FromContext(ctx)
-	
+
 	if restore.Spec.BackupName == "" && !restore.Spec.UseLatestBackup {
 		return nil, fmt.Errorf("either backupName or useLatestBackup must be specified")
 	}
@@ -109,7 +111,7 @@ func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context
 		logger.Info("Search snapshot for StatefulSet " + restore.Spec.StatefulSetRef.Name + "backup with " + restore.Spec.BackupName)
 		snapshotList := &snapshotv1.VolumeSnapshotList{}
 		labels := client.MatchingLabels{
-			"backup.sts-backup.io/policy": restore.Spec.BackupName,
+			"backup.sts-backup.io/policy":      restore.Spec.BackupName,
 			"backup.sts-backup.io/statefulset": restore.Spec.StatefulSetRef.Name,
 		}
 		if err := r.List(ctx, snapshotList, labels, client.InNamespace(restore.Spec.StatefulSetRef.Namespace)); err != nil {
@@ -124,33 +126,33 @@ func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context
 	}
 
 	// FIX-ME: Implement useLatestBackup logic
-	return nil,nil
+	return nil, nil
 }
 
 // restoreSnapshots performs the actual restoration of PVCs from snapshots.
 // For each snapshot, it deletes the existing PVC and recreates it with the snapshot as data source.
 // This allows the PVC to be populated with data from the snapshot.
-func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot) (error) {
+func (r *StatefulSetRestoreReconciler) restoreSnapshots(ctx context.Context, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot) error {
 	logger := logf.FromContext(ctx)
 	for _, snapshot := range snapshots {
 		if snapshot.Spec.Source.PersistentVolumeClaimName == nil {
-			return fmt.Errorf("Snapshot %s has no PVC bounded", snapshot.Name)
+			return fmt.Errorf("snapshot %s has no PVC bounded", snapshot.Name)
 		}
 		pvcName := snapshot.Spec.Source.PersistentVolumeClaimName
 		existingPVC := corev1.PersistentVolumeClaim{}
 		pvcKey := types.NamespacedName{
-			Name: *pvcName,
+			Name:      *pvcName,
 			Namespace: sts.Namespace,
 		}
 		// Get the PVC associated with the snapshot
 		if err := r.Get(ctx, pvcKey, &existingPVC); err != nil {
-			logger.Error(err, "Failed to get PVC " + pvcKey.Name + "from snapshot " + snapshot.Name)
-			return fmt.Errorf("Failed to ghe PVC %s. Err: %w", pvcKey.Name, err)
+			logger.Error(err, "Failed to get PVC "+pvcKey.Name+"from snapshot "+snapshot.Name)
+			return fmt.Errorf("failed to ghe PVC %s. Err: %w", pvcKey.Name, err)
 		}
 		// Delete the existing PVC
 		if err := r.Delete(ctx, &existingPVC); err != nil {
-			logger.Error(err, "Failed to delete PVC " + pvcKey.Name + "from snapshot " + snapshot.Name)
-			return fmt.Errorf("Failed to delete PVC %s from snapshot %s. Err: %w", pvcKey.Name, snapshot.Name, err)
+			logger.Error(err, "Failed to delete PVC "+pvcKey.Name+"from snapshot "+snapshot.Name)
+			return fmt.Errorf("failed to delete PVC %s from snapshot %s. Err: %w", pvcKey.Name, snapshot.Name, err)
 		}
 
 		// Wait for PVC deletion to complete
@@ -181,7 +183,7 @@ func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, sts 
 		}
 
 		if err := r.Create(ctx, newPVC); err != nil {
-			logger.Error(err, "Failed to creaye PVC " + newPVC.Name + "from snapshot " + snapshot.Name)
+			logger.Error(err, "Failed to creaye PVC "+newPVC.Name+"from snapshot "+snapshot.Name)
 			return fmt.Errorf("failed to create PVC from snapshot: %w", err)
 		}
 
@@ -193,7 +195,7 @@ func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, sts 
 // handleScalingUp restores the StatefulSet to its original replica count after restore.
 // It scales the StatefulSet back up and waits for all pods to become ready.
 // Once all replicas are ready, it marks the restore as completed.
-func (r *StatefulSetRestoreReconciler) handleScalingUp(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet,) (ctrl.Result, error) {
+func (r *StatefulSetRestoreReconciler) handleScalingUp(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	// Restore the original replica count
@@ -217,49 +219,61 @@ func (r *StatefulSetRestoreReconciler) handleScalingUp(ctx context.Context, rest
 	logger.Info("Restore completed successfully")
 	now := metav1.Now()
 	restore.Status.CompletionTime = &now
-	r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseCompleted,
-		"Completed", "Restore completed successfully")
+	if err := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseCompleted,
+		"Completed", "Restore completed successfully"); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
 // handleRestoring manages the actual restoration phase.
 // It finds the appropriate snapshots and restores them to the PVCs.
 // Once restoration is complete, it transitions to the ScalingUp phase.
-func (r *StatefulSetRestoreReconciler) handleRestoring(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error){
+func (r *StatefulSetRestoreReconciler) handleRestoring(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Performing restore for statefulset: " + sts.GetName())
 
-	snapshots, err := r.findSnapshotToRestore(ctx, restore);
+	snapshots, err := r.findSnapshotToRestore(ctx, restore)
 	if err != nil {
 		logger.Error(err, "Failed to find Snapshot")
-		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "SnapshotsNotFound", fmt.Sprintf("Failed to find snapshots: %v", err))
+		if err_update := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "SnapshotsNotFound", fmt.Sprintf("Failed to find snapshots: %v", err)); err_update != nil {
+			logger.Error(err_update, "Failed to update restore status")
+		}
 	}
 
 	err = r.restoreSnapshots(ctx, sts, snapshots)
 	if err != nil {
-		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "RestoreFailed", "Some snaphosts failed to restore")
+		if err_update := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "RestoreFailed", "Some snaphosts failed to restore"); err_update != nil {
+			logger.Error(err_update, "Failed to update restore status")
+		}
 		return ctrl.Result{}, err
 	}
-	
-	r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseScalingUp, "ScalingUp", "Restore completed, scaling up StatefulSet")
+
+	if err := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseScalingUp, "ScalingUp", "Restore completed, scaling up StatefulSet"); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 // handleScalingDown scales the StatefulSet down to zero replicas before restoration.
 // This is necessary to ensure no pods are using the PVCs during the restore process.
 // Once scaled down, it transitions to the Restoring phase.
-func (r *StatefulSetRestoreReconciler) handleScalingDown(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error){
+func (r *StatefulSetRestoreReconciler) handleScalingDown(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	if *sts.Spec.Replicas == 0 {
 		logger.Info("StatefulSet " + sts.GetName() + "scaled down successfully")
-		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseRestoring, "Restoring", "Statefulset scaled down, starting restore")
+		if err := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseRestoring, "Restoring", "Statefulset scaled down, starting restore"); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	} else {
 		logger.Info("StatefulSet " + sts.GetName() + ": scaling down to zero replicas before restore")
 		*sts.Spec.Replicas = 0
 		if err := r.Update(ctx, sts); err != nil {
-			r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhase(backupv1alpha1.BackupPhaseFailed), "StatefulSet not sclaed down", "Unable to scaling down StatefulSet "+ sts.GetName())
-			return ctrl.Result{}, fmt.Errorf("Unable to scaling down StatefulSet %s", sts.GetName())
+			if err_update := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhase(backupv1alpha1.BackupPhaseFailed), "StatefulSet not sclaed down", "Unable to scaling down StatefulSet "+sts.GetName()); err_update != nil {
+				return ctrl.Result{}, err_update
+			}
+			return ctrl.Result{}, fmt.Errorf("unable to scaling down StatefulSet %s", sts.GetName())
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -268,7 +282,7 @@ func (r *StatefulSetRestoreReconciler) handleScalingDown(ctx context.Context, re
 // handleNewRestore initializes a new restore operation.
 // It saves the original replica count and decides whether to scale down the StatefulSet
 // based on the ScaleDown specification. Transitions to either ScalingDown or Restoring phase.
-func (r *StatefulSetRestoreReconciler) handleNewRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error){
+func (r *StatefulSetRestoreReconciler) handleNewRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Performing restore")
 
@@ -282,18 +296,22 @@ func (r *StatefulSetRestoreReconciler) handleNewRestore(ctx context.Context, res
 	}
 
 	if scaleDown {
-		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseScalingDown, "ScalingDown", "Scaling down StatefulSet to 0 replicas")
+		if err := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseScalingDown, "ScalingDown", "Scaling down StatefulSet to 0 replicas"); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseRestoring, "Restoring", "Starting restore without scaling down")
+	if err := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseRestoring, "Restoring", "Starting restore without scaling down"); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 // updateRestoreStatus updates the status phase and conditions of a restore resource.
 // It sets the restore phase, adds or updates a status condition with the provided
 // reason and message, and persists the changes to the Kubernetes API server.
-func (r *StatefulSetRestoreReconciler) updateRestoreStatus(ctx context.Context,restore *backupv1alpha1.StatefulSetRestore,phase backupv1alpha1.RestorePhase,reason, message string,) {
+func (r *StatefulSetRestoreReconciler) updateRestoreStatus(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, phase backupv1alpha1.RestorePhase, reason, message string) error {
 	restore.Status.Phase = phase
 	meta.SetStatusCondition(&restore.Status.Conditions, metav1.Condition{
 		Type:               string(phase),
@@ -303,7 +321,10 @@ func (r *StatefulSetRestoreReconciler) updateRestoreStatus(ctx context.Context,r
 		ObservedGeneration: restore.Generation,
 	})
 	// FIX ME: CHECK UPDATE ERROR
-	r.Status().Update(ctx, restore)
+	if err := r.Status().Update(ctx, restore); err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

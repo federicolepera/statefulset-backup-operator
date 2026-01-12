@@ -37,7 +37,6 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	backupv1alpha1 "github.com/federicolepera/statefulset-backup-operator/api/v1alpha1"
@@ -47,8 +46,8 @@ import (
 // StatefulSetBackupReconciler reconciles a StatefulSetBackup object
 type StatefulSetBackupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Config *rest.Config
+	Scheme    *runtime.Scheme
+	Config    *rest.Config
 	ClientSet *kubernetes.Clientset
 }
 
@@ -73,14 +72,14 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	sts := &appsv1.StatefulSet{}
-	stsKey := types.NamespacedName {
-		Name: backup.Spec.StatefulSetRef.Name,
+	stsKey := types.NamespacedName{
+		Name:      backup.Spec.StatefulSetRef.Name,
 		Namespace: backup.Spec.StatefulSetRef.Namespace,
 	}
 
 	if err := r.Get(ctx, stsKey, sts); err != nil {
 		logger.Error(err, "Unable to get StatefulSet")
-		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error()); err_update != nil {
+		if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error()); err_update != nil {
 			logger.Error(err_update, "failed to update backup status")
 			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 		}
@@ -90,7 +89,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	shouldBackup, err := r.shouldCreateBackup(backup)
 	if err != nil {
 		logger.Error(err, "Error evaluating schedule")
-		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error()); err_update != nil {
+		if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error()); err_update != nil {
 			logger.Error(err_update, "failed to update backup status")
 			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 		}
@@ -99,10 +98,13 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if shouldBackup {
 		logger.Info("Creating new backup")
+		if err := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseInProgress, "BackupInitializing", "Backup procedure is initializing. Next Step: PreBackupHook"); err != nil {
+			return ctrl.Result{}, err
+		}
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PreBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute pre-backup hook")
-			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PreBackupHookError", err.Error()); err_update != nil {
+			if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "PreBackupHookError", err.Error()); err_update != nil {
 				logger.Error(err_update, "Failed to update backup status")
 				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 			}
@@ -112,7 +114,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		_, err := r.createSnapshots(ctx, sts, backup)
 		if err != nil {
 			logger.Error(err, "Failed to create snapshots")
-			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "SnapshotCreationError", err.Error()); err_update != nil {
+			if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "SnapshotCreationError", err.Error()); err_update != nil {
 				logger.Error(err_update, "Failed to update backup status")
 				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 			}
@@ -129,7 +131,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.executeBackupHook(ctx, sts, backup, backup.Spec.PostBackupHook.Command); err != nil {
 			logger.Error(err, "Failed to execute post-backup hook")
-			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "PostBackupHookError", err.Error()); err_update != nil {
+			if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "PostBackupHookError", err.Error()); err_update != nil {
 				logger.Error(err_update, "Failed to update backup status")
 				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 			}
@@ -138,7 +140,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 		if err := r.applyRetentionPolicy(ctx, backup); err != nil {
 			logger.Error(err, "Failed to apply retention policy")
-			if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "RetentionPolicyError", err.Error()); err_update != nil {
+			if err_update := r.updateRestoreStatus(ctx, backup, backupv1alpha1.BackupPhaseFailed, "RetentionPolicyError", err.Error()); err_update != nil {
 				logger.Error(err_update, "Failed to update backup status")
 				err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 			}
@@ -160,26 +162,26 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // The function iterates through all replicas of the StatefulSet and executes
 // the provided command in the first container of each pod using the Kubernetes exec API.
 // Returns an error if the command execution fails on any pod.
-func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup, command []string, ) (error) {
+func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context, sts *appsv1.StatefulSet, backup *backupv1alpha1.StatefulSetBackup, command []string) error {
 	logger := logf.FromContext(ctx)
 	if len(command) == 0 {
 		logger.Info("No Pre Backup Hook command detected")
 		return nil
 	}
 
-	stsKey := types.NamespacedName {
+	stsKey := types.NamespacedName{
 		Name: backup.Spec.StatefulSetRef.Name,
 	}
 
 	for i := 0; i < int(*sts.Spec.Replicas); i++ {
-		podName := fmt.Sprintf("%s-%d",stsKey.Name,i)
+		podName := fmt.Sprintf("%s-%d", stsKey.Name, i)
 		podKey := types.NamespacedName{
-			Name: podName,
+			Name:      podName,
 			Namespace: backup.Spec.StatefulSetRef.Namespace,
 		}
 		pod := &corev1.Pod{}
-		if err := r.Client.Get(ctx, podKey, pod); err != nil {
-			return fmt.Errorf("Unable to the pod %s. Error: %w", podName, err)
+		if err := r.Get(ctx, podKey, pod); err != nil {
+			return fmt.Errorf("unable to the pod %s. Error: %w", podName, err)
 		}
 
 		// Use specified container name or default to first container
@@ -193,9 +195,9 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 		req := r.ClientSet.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podKey.Namespace).SubResource("exec")
 		req.VersionedParams(&corev1.PodExecOptions{
 			Container: containerName,
-			Command: backup.Spec.PreBackupHook.Command,
-			Stdout: true,
-			Stdin: true,
+			Command:   backup.Spec.PreBackupHook.Command,
+			Stdout:    true,
+			Stdin:     true,
 		}, scheme.ParameterCodec)
 
 		exec, err := remotecommand.NewSPDYExecutor(
@@ -206,7 +208,7 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 
 		if err != nil {
 			logger.Error(err, "Error in execution to pod")
-			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+			return fmt.Errorf("error in execution to pod. Err: %w", err)
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -217,15 +219,15 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 		})
 		if err != nil {
 			logger.Error(err, "Error in execution to pod")
-			return fmt.Errorf("Error in execution to pod. Err: %w",err)
+			return fmt.Errorf("error in execution to pod. Err: %w", err)
 		}
-		
+
 		logger.Info("hook executed",
 			"stdout", stdout.String(),
 			"stderr", stderr.String(),
 		)
 	}
-	
+
 	return nil
 }
 
@@ -234,12 +236,12 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 // and deletes the oldest snapshots to keep only the specified number (KeepLast)
 // for each PVC. This ensures that old backups are automatically cleaned up
 // according to the configured retention policy.
-func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup) error {
-	logger := log.FromContext(ctx)
+func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context, backup *backupv1alpha1.StatefulSetBackup) error {
+	logger := logf.FromContext(ctx)
 
 	// List all snapshots for this policy in the correct namespace
 	snapshotList := &snapshotv1.VolumeSnapshotList{}
-	if err := r.List(ctx, snapshotList, 
+	if err := r.List(ctx, snapshotList,
 		client.MatchingLabels{
 			"backup.sts-backup.io/policy": backup.Name,
 		},
@@ -266,9 +268,9 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 			continue
 		}
 
-		logger.Info("Applying retention policy", 
-			"pvc", pvcName, 
-			"total", len(pvcSnapshots), 
+		logger.Info("Applying retention policy",
+			"pvc", pvcName,
+			"total", len(pvcSnapshots),
 			"keepLast", backup.Spec.RetentionPolicy.KeepLast)
 
 		// Sort by creation date (oldest to newest)
@@ -282,11 +284,11 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context,b
 		// Delete the oldest snapshots
 		for i := 0; i < toDelete; i++ {
 			snapshot := &pvcSnapshots[i]
-			logger.Info("Deleting old snapshot", 
-				"snapshot", snapshot.Name, 
+			logger.Info("Deleting old snapshot",
+				"snapshot", snapshot.Name,
 				"pvc", pvcName,
 				"age", time.Since(snapshot.CreationTimestamp.Time))
-			
+
 			if err := r.Delete(ctx, snapshot); err != nil {
 				logger.Error(err, "Failed to delete old snapshot", "snapshot", snapshot.Name)
 			} else {
@@ -348,10 +350,10 @@ func (r *StatefulSetBackupReconciler) calculateRequeueAfter(backup *backupv1alph
 // resource for each PVC, and returns a list of snapshot information.
 // Each snapshot is labeled with the StatefulSet name and backup policy name
 // for easy identification and management.
-func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *appsv1.StatefulSet,backup *backupv1alpha1.StatefulSetBackup) ([]backupv1alpha1.SnapshotInfo, error) {
+func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context, sts *appsv1.StatefulSet, backup *backupv1alpha1.StatefulSetBackup) ([]backupv1alpha1.SnapshotInfo, error) {
 	var snapshots []backupv1alpha1.SnapshotInfo
 
-	logger := log.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
 	for _, vct := range sts.Spec.VolumeClaimTemplates {
 		for i := int32(0); i < *sts.Spec.Replicas; i++ {
@@ -359,7 +361,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 			pvc := &corev1.PersistentVolumeClaim{}
 
 			pvcKey := types.NamespacedName{
-				Name: pvcName,
+				Name:      pvcName,
 				Namespace: sts.Namespace,
 			}
 
@@ -372,7 +374,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 			snapshotClassName := "csi-hostpath-snapclass"
 			snapshot := &snapshotv1.VolumeSnapshot{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: snapshotName,
+					Name:      snapshotName,
 					Namespace: sts.Namespace,
 					Labels: map[string]string{
 						"backup.sts-backup.io/statefulset": sts.Name,
@@ -383,7 +385,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 					Source: snapshotv1.VolumeSnapshotSource{
 						PersistentVolumeClaimName: &pvcName,
 					},
-				VolumeSnapshotClassName: &snapshotClassName,
+					VolumeSnapshotClassName: &snapshotClassName,
 				},
 			}
 
@@ -406,6 +408,7 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context,sts *a
 
 	return snapshots, nil
 }
+
 // shouldCreateBackup determines whether a backup should be created at this time.
 // For manual backups (no schedule), it returns true only if no backup has been taken yet.
 // For scheduled backups, it parses the cron expression and checks if the current time
@@ -434,7 +437,7 @@ func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.
 		lastBackup := backup.Status.LastBackupTime.Time
 		nextScheduled := schedule.Next(lastBackup)
 
-		if now.After(nextScheduled) || now.Equal(nextScheduled){
+		if now.After(nextScheduled) || now.Equal(nextScheduled) {
 			return true, nil
 		}
 
@@ -446,8 +449,8 @@ func (r *StatefulSetBackupReconciler) shouldCreateBackup(backup *backupv1alpha1.
 // It sets the backup phase, adds or updates a status condition with the provided
 // reason and message, and persists the changes to the Kubernetes API server.
 // This function is typically called when an error occurs or when the backup state changes.
-func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context,backup *backupv1alpha1.StatefulSetBackup,phase backupv1alpha1.BackupPhase,reason, message string,) error {
-	logger := log.FromContext(ctx)
+func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context, backup *backupv1alpha1.StatefulSetBackup, phase backupv1alpha1.BackupPhase, reason, message string) error {
+	logger := logf.FromContext(ctx)
 	backup.Status.Phase = phase
 	meta.SetStatusCondition(&backup.Status.Conditions, metav1.Condition{
 		Type:               string(phase),
