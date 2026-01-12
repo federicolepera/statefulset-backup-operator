@@ -155,8 +155,35 @@ func (r *StatefulSetRestoreReconciler) restoreSnapshots(ctx context.Context, sts
 			return fmt.Errorf("failed to delete PVC %s from snapshot %s. Err: %w", pvcKey.Name, snapshot.Name, err)
 		}
 
-		// Wait for PVC deletion to complete
-		time.Sleep(10 * time.Second)
+		// Wait for PVC deletion to complete (poll until it's gone)
+		logger.Info("Waiting for PVC deletion to complete", "pvc", pvcKey.Name)
+		deletionTimeout := 60 * time.Second
+		pollInterval := 2 * time.Second
+		startTime := time.Now()
+
+		for {
+			// Check if PVC still exists
+			checkPVC := &corev1.PersistentVolumeClaim{}
+			err := r.Get(ctx, pvcKey, checkPVC)
+			if errors.IsNotFound(err) {
+				// PVC is deleted, we can proceed
+				logger.Info("PVC successfully deleted", "pvc", pvcKey.Name)
+				break
+			}
+			if err != nil {
+				// Unexpected error
+				logger.Error(err, "Error checking PVC deletion status", "pvc", pvcKey.Name)
+				return fmt.Errorf("error checking PVC deletion status %s: %w", pvcKey.Name, err)
+			}
+
+			// Check timeout
+			if time.Since(startTime) > deletionTimeout {
+				return fmt.Errorf("timeout waiting for PVC %s deletion after %v", pvcKey.Name, deletionTimeout)
+			}
+
+			// Wait before next check
+			time.Sleep(pollInterval)
+		}
 
 		// Recreate the PVC with snapshot as data source
 		newPVC := &corev1.PersistentVolumeClaim{
