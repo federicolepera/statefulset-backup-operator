@@ -47,15 +47,46 @@ Velero is excellent for full-cluster disaster recovery, but if you just need:
 ## 📋 Prerequisites
 
 - Kubernetes 1.20+
-- CSI driver with snapshot support
+- CSI driver with snapshot support (CSI Snapshot v1 API)
 - VolumeSnapshotClass configured in your cluster
 - Kubectl access to the cluster
+
+### Required CRDs
+
+The operator requires the following VolumeSnapshot CRDs to be installed:
+- `volumesnapshotclasses.snapshot.storage.k8s.io`
+- `volumesnapshots.snapshot.storage.k8s.io`
+- `volumesnapshotcontents.snapshot.storage.k8s.io`
+
+**Verify VolumeSnapshot API is available:**
+```bash
+kubectl api-resources | grep volumesnapshot
+```
+
+**Install VolumeSnapshot CRDs (if not present):**
+```bash
+# Install CSI snapshot controller and CRDs
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+```
 
 ### Tested Environments
 
 - ✅ Minikube (with CSI hostpath driver)
 - ✅ Kind (with CSI snapshot support)
 - 🔄 GKE, EKS, AKS (testing in progress)
+
+### CSI Driver Compatibility
+
+The operator works with any CSI driver that supports VolumeSnapshot v1 API:
+- AWS EBS CSI Driver
+- GCE Persistent Disk CSI Driver
+- Azure Disk CSI Driver
+- Ceph CSI
+- Longhorn
+- OpenEBS
+- Portworx
 
 ## 🛠️ Installation
 
@@ -111,9 +142,10 @@ spec:
     name: postgresql
     namespace: default
   retentionPolicy:
-    keepLast: 3
-  volumeSnapshotClass: csi-hostpath-snapclass
+    keepLast: 3  # Keep last 3 snapshots per PVC
 ```
+
+> **Note**: VolumeSnapshotClass is currently hardcoded to `csi-hostpath-snapclass` in the operator. Configuration via CRD spec is planned for a future release.
 
 ### Scheduled Backup with Hooks
 
@@ -129,10 +161,11 @@ spec:
   statefulSetRef:
     name: postgresql
     namespace: production
-  schedule: "0 2 * * *"  # Every day at 2 AM
+  schedule: "0 2 * * *"  # Every day at 2 AM (standard cron format)
   retentionPolicy:
-    keepLast: 7  # Keep last 7 backups per replica
+    keepLast: 7  # Keep last 7 backups per PVC
   preBackupHook:
+    containerName: postgres  # Optional: specify container (defaults to first container)
     command:
       - "psql"
       - "-U"
@@ -143,8 +176,13 @@ spec:
     command:
       - "echo"
       - "Backup completed"
-  volumeSnapshotClass: csi-hostpath-snapclass
 ```
+
+**Hook Behavior:**
+- Hooks execute **sequentially** on each pod (pod-0, then pod-1, etc.)
+- If a hook fails on any pod, the entire backup fails
+- Hooks execute in the first container unless `containerName` is specified
+- No timeout is currently configured for hooks
 
 ### Restore from Backup
 
@@ -161,26 +199,38 @@ spec:
     name: postgresql
     namespace: production
   backupName: postgres-scheduled-backup
-  scaleDown: true  # Scale down before restore (recommended)
+  scaleDown: true  # Recommended: scales StatefulSet to 0 before restore
 ```
 
-### Restore Latest Backup
+**Restore Phases:**
+The restore process follows a multi-phase workflow:
+1. **New**: Initial state, saves original replica count
+2. **ScalingDown**: Reduces StatefulSet replicas to 0 (if `scaleDown: true`)
+3. **Restoring**: Deletes existing PVCs and recreates them from snapshots
+4. **ScalingUp**: Restores StatefulSet to original replica count
+5. **Completed/Failed**: Final state
 
-Automatically restore from the most recent snapshot:
+### Selective Snapshot Restore
+
+Restore specific snapshots (useful for partial recovery):
 
 ```yaml
 apiVersion: backup.sts-backup.io/v1alpha1
 kind: StatefulSetRestore
 metadata:
-  name: restore-latest
+  name: restore-selective
   namespace: production
 spec:
   statefulSetRef:
     name: postgresql
     namespace: production
-  useLatestBackup: true
+  snapshotNames:
+    - postgres-backup-data-20260112-120000-0  # Restore only replica-0
+    - postgres-backup-data-20260112-120000-1  # Restore only replica-1
   scaleDown: true
 ```
+
+> **Note**: The `useLatestBackup` field is defined in the CRD but not yet implemented. Use `backupName` or `snapshotNames` for restores.
 
 ## 🔍 Monitoring
 
@@ -197,6 +247,23 @@ kubectl describe statefulsetbackup my-database-backup
 kubectl get volumesnapshot
 ```
 
+**Status Fields:**
+- **Phase**: Current state - `Ready`, `InProgress`, or `Failed`
+- **LastBackupTime**: Timestamp of the most recent successful backup
+- **Conditions**: Standard Kubernetes conditions for state tracking
+- **Message**: Human-readable status information
+
+Example output:
+```yaml
+status:
+  phase: Ready
+  lastBackupTime: "2026-01-12T14:30:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      lastTransitionTime: "2026-01-12T14:30:05Z"
+```
+
 ### Check Restore Status
 
 ```bash
@@ -210,6 +277,25 @@ kubectl get statefulsetrestore restore-postgres -w
 kubectl describe statefulsetrestore restore-postgres
 ```
 
+**Restore Status Fields:**
+- **Phase**: Current phase - `New`, `ScalingDown`, `Restoring`, `ScalingUp`, `Completed`, or `Failed`
+- **OriginalReplicas**: Original replica count saved before scaling down
+- **RestoredSnapshots**: Map of PVC names to restored snapshot names
+- **StartTime/CompletionTime**: Timing information for the restore operation
+
+Example output:
+```yaml
+status:
+  phase: Completed
+  originalReplicas: 3
+  restoredSnapshots:
+    data-postgresql-0: postgres-backup-data-20260112-120000-0
+    data-postgresql-1: postgres-backup-data-20260112-120000-1
+    data-postgresql-2: postgres-backup-data-20260112-120000-2
+  startTime: "2026-01-12T15:00:00Z"
+  completionTime: "2026-01-12T15:05:30Z"
+```
+
 ### View Operator Logs
 
 ```bash
@@ -221,6 +307,40 @@ kubectl logs -n statefulset-backup-operator-system <operator-pod-name> -f
 ```
 
 ## 🏗️ Architecture
+
+### Snapshot Naming and Labels
+
+**VolumeSnapshot Naming Format:**
+```
+{backup-name}-{volume-claim-template-name}-{timestamp}-{replica-index}
+```
+
+Example: `postgres-backup-data-20260112-143000-0`
+
+**Labels Applied to Snapshots:**
+- `backup.sts-backup.io/statefulset`: Name of the source StatefulSet
+- `backup.sts-backup.io/policy`: Name of the backup resource
+
+**PVC Naming for StatefulSets:**
+```
+{volume-claim-template-name}-{statefulset-name}-{replica-index}
+```
+
+Example: `data-postgresql-0`
+
+### Backup Scheduling Behavior
+
+**Manual Backups (no schedule):**
+- Executed once when the backup resource is created
+- No subsequent backups occur automatically
+- Status updates to `Ready` after completion
+
+**Scheduled Backups:**
+- Uses standard cron format: `minute hour day-of-month month day-of-week`
+- First backup executes immediately (within 10 seconds) if no `LastBackupTime` exists
+- Next reconciliation scheduled up to 1 hour in advance
+- If schedule is missed (controller downtime), executes immediately upon restart
+- Invalid cron expressions cause backup to fail with 1-minute retry interval
 
 ### Backup Flow
 
@@ -243,12 +363,21 @@ kubectl logs -n statefulset-backup-operator-system <operator-pod-name> -f
 
 ### Retention Policy
 
-Retention policies are **per-replica**, meaning:
+Retention policies are **per-PVC**, meaning:
 - With 3 replicas and `keepLast: 2`
-- Each replica maintains its own 2 most recent snapshots
-- Total snapshots: 6 (2 per replica)
+- Each PVC maintains its own 2 most recent snapshots
+- Total snapshots: 6 (2 per PVC)
+- Old snapshots are deleted based on creation timestamp (oldest first)
 
 This ensures you can always restore all replicas to the same point in time.
+
+**Configuration:**
+```yaml
+retentionPolicy:
+  keepLast: 5  # Keep last 5 snapshots per PVC
+```
+
+> **Note**: The `keepDays` field exists in the CRD but is not yet implemented. Only `keepLast` is currently functional.
 
 ## 🚧 Work in Progress
 
@@ -256,19 +385,47 @@ The following features are currently under development or planned:
 
 ### Current Limitations
 
-- ⚠️ **Container Selection** - Pre/post hooks currently execute on the first container only
-  - Workaround: Specify container explicitly in hook command
-  - Fix planned: Add `containerName` field to hook specification
+- ⚠️ **VolumeSnapshotClass Hardcoded** - Currently fixed to `csi-hostpath-snapclass`
+  - Cannot be configured via CRD spec
+  - Workaround: Modify controller source code
+  - Fix planned: Make configurable via CRD field
 
-- ⚠️ **Error Handling** - Some error scenarios need improved handling
-  - Status updates may not always reflect failures
-  - PVC deletion during restore needs better wait logic
+- ⚠️ **Hook Timeout** - No timeout configuration for pre/post backup hooks
+  - Hooks can hang indefinitely if command doesn't complete
+  - Workaround: Ensure hook commands have internal timeouts
+  - Enhancement planned: Add `timeoutSeconds` field to hook specification
 
-- ⚠️ **VolumeSnapshotClass** - Currently hardcoded to `csi-hostpath-snapclass`
-  - Fix planned: Make configurable via CRD spec
+- ⚠️ **Hook Container Selection** - Defaults to first container in pod
+  - Use `containerName` field in hook spec to override
+  - If container name is invalid, hook execution fails
 
-- ⚠️ **Cross-Namespace** - Backup and target StatefulSet must be in same namespace
+- ⚠️ **Cross-Namespace Operations** - Backup and target StatefulSet must be in same namespace
+  - Cross-namespace snapshots not supported
   - Enhancement planned: Support cross-namespace operations
+
+- ⚠️ **Restore to Different StatefulSet** - Not supported
+  - Restore only works with the original source StatefulSet
+  - Workaround: Manually copy snapshots and recreate PVCs
+
+- ⚠️ **PVC Deletion Timeout** - Hardcoded to 60 seconds during restore
+  - If PVC takes longer to delete, restore fails
+  - Polls every 2 seconds for deletion completion
+  - Enhancement planned: Make timeout configurable
+
+- ⚠️ **Snapshot Readiness Verification** - Snapshots not verified before applying retention
+  - Retention policy is applied immediately after snapshot creation
+  - VolumeSnapshot may still be in "Creating" state
+  - Enhancement planned: Wait for ReadyToUse=true before cleanup
+
+- ⚠️ **Feature Not Implemented** - `useLatestBackup` field exists but doesn't work
+  - Field is defined in StatefulSetRestore CRD
+  - Implementation planned for next release
+  - Use `backupName` or `snapshotNames` instead
+
+- ⚠️ **Feature Not Implemented** - `keepDays` retention policy not functional
+  - Field exists in RetentionPolicy but has no effect
+  - Only `keepLast` is currently implemented
+  - Time-based retention planned for future release
 
 ### Roadmap
 
@@ -395,10 +552,10 @@ spec:
     namespace: databases
   schedule: "0 */6 * * *"  # Every 6 hours
   retentionPolicy:
-    keepLast: 8  # Keep 48 hours of backups
+    keepLast: 8  # Keep 48 hours of backups (8 snapshots per PVC)
   preBackupHook:
+    containerName: postgres
     command: ["psql", "-U", "postgres", "-c", "CHECKPOINT"]
-  volumeSnapshotClass: csi-hostpath-snapclass
 ```
 
 ### Example 2: MongoDB Backup with Replica Sync
@@ -414,9 +571,10 @@ spec:
     namespace: databases
   schedule: "0 3 * * *"  # Daily at 3 AM
   retentionPolicy:
-    keepLast: 7
+    keepLast: 7  # Keep last 7 snapshots per PVC
   preBackupHook:
-    command: 
+    containerName: mongodb
+    command:
       - "mongosh"
       - "--eval"
       - "db.fsyncLock()"
@@ -425,7 +583,6 @@ spec:
       - "mongosh"
       - "--eval"
       - "db.fsyncUnlock()"
-  volumeSnapshotClass: csi-hostpath-snapclass
 ```
 
 ### Example 3: Redis Cluster Backup
@@ -441,10 +598,10 @@ spec:
     namespace: cache
   schedule: "*/30 * * * *"  # Every 30 minutes
   retentionPolicy:
-    keepLast: 12  # Keep 6 hours of backups
+    keepLast: 12  # Keep 6 hours of backups (12 snapshots per PVC)
   preBackupHook:
+    containerName: redis
     command: ["redis-cli", "BGSAVE"]
-  volumeSnapshotClass: csi-hostpath-snapclass
 ```
 
 ## 🤝 Contributing
