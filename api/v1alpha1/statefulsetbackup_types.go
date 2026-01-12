@@ -41,10 +41,11 @@ type RetentionPolicy struct {
 type BackupHook struct {
 	// Command is the array of command and arguments to execute
 	Command []string `json:"command,omitempty"`
-	// ContainerName specifies the container in which to run the command (optional)	
+	// ContainerName specifies the container in which to run the command (optional)
 	// +optional
 	ContainerName string `json:"containerName,omitempty"`
 }
+
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup.
 type StatefulSetBackupSpec struct {
 	// StatefulSetRef references the StatefulSet to backup
@@ -76,12 +77,13 @@ type BackupPhase string
 
 const (
 	// BackupPhaseReady indicates the backup is ready and completed successfully
-	BackupPhaseReady      BackupPhase = "Ready"
+	BackupPhaseReady BackupPhase = "Ready"
 	// BackupPhaseInProgress indicates the backup is currently in progress
 	BackupPhaseInProgress BackupPhase = "InProgress"
 	// BackupPhaseFailed indicates the backup failed
-	BackupPhaseFailed     BackupPhase = "Failed"
+	BackupPhaseFailed BackupPhase = "Failed"
 )
+
 // StatefulSetBackupStatus defines the observed state of StatefulSetBackup.
 type StatefulSetBackupStatus struct {
 	// Conditions represent the current state of the backup resource.
@@ -102,16 +104,16 @@ type StatefulSetBackupStatus struct {
 // SnapshotInfo contains information about a volume snapshot.
 type SnapshotInfo struct {
 	// Name of the VolumeSnapshot resource
-	Name         string      `json:"name"`
+	Name string `json:"name"`
 	// CreationTime is when the snapshot was created
 	CreationTime metav1.Time `json:"creationTime"`
 	// PVCName is the name of the PVC that was snapshotted
-	PVCName      string      `json:"pvcName"`
+	PVCName string `json:"pvcName"`
 	// Size is the size of the snapshot (optional)
 	// +optional
-	Size         string      `json:"size,omitempty"`
+	Size string `json:"size,omitempty"`
 	// ReadyToUse indicates if the snapshot is ready to be used for restore
-	ReadyToUse   bool        `json:"readyToUse"`
+	ReadyToUse bool `json:"readyToUse"`
 }
 
 // +kubebuilder:object:root=true

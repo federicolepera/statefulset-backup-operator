@@ -92,18 +92,19 @@ type RestorePhase string
 
 const (
 	// RestorePhaseNew indicates a newly created restore resource
-	RestorePhaseNew        RestorePhase = "New"
+	RestorePhaseNew RestorePhase = "New"
 	// RestorePhaseScalingDown indicates the StatefulSet is being scaled down to 0
 	RestorePhaseScalingDown RestorePhase = "ScalingDown"
 	// RestorePhaseRestoring indicates PVCs are being restored from snapshots
-	RestorePhaseRestoring  RestorePhase = "Restoring"
+	RestorePhaseRestoring RestorePhase = "Restoring"
 	// RestorePhaseScalingUp indicates the StatefulSet is being scaled back up
-	RestorePhaseScalingUp  RestorePhase = "ScalingUp"
+	RestorePhaseScalingUp RestorePhase = "ScalingUp"
 	// RestorePhaseCompleted indicates the restore completed successfully
-	RestorePhaseCompleted  RestorePhase = "Completed"
+	RestorePhaseCompleted RestorePhase = "Completed"
 	// RestorePhaseFailed indicates the restore failed
-	RestorePhaseFailed     RestorePhase = "Failed"
+	RestorePhaseFailed RestorePhase = "Failed"
 )
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
