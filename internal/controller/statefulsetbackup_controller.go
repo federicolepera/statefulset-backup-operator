@@ -100,7 +100,12 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, err
 		}
 
-		r.createSnapshots(ctx, sts, backup)
+		_, err := r.createSnapshots(ctx, sts, backup)
+		if err != nil {
+			logger.Error(err, "Failed to create snapshots")
+			r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "SnapshotCreationError", err.Error())
+			return ctrl.Result{}, err
+		}
 
 		now := metav1.Now()
 		backup.Status.LastBackupTime = now
