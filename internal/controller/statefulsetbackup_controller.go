@@ -80,8 +80,8 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if err := r.Get(ctx, stsKey, sts); err != nil {
 		logger.Error(err, "Unable to get StatefulSet")
-		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error()); err != nil {
-			logger.Error(err_update, "Failed to update backup status")
+		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "StatefulSetNotFound", err.Error()); err_update != nil {
+			logger.Error(err_update, "failed to update backup status")
 			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 		}
 		return ctrl.Result{}, err
@@ -91,7 +91,7 @@ func (r *StatefulSetBackupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		logger.Error(err, "Error evaluating schedule")
 		if err_update := r.updateRestoreStatus(ctx,backup, backupv1alpha1.BackupPhaseFailed, "ScheduleError", err.Error()); err_update != nil {
-			logger.Error(err_update, "Failed to update backup status")
+			logger.Error(err_update, "failed to update backup status")
 			err = fmt.Errorf("error: %w - failed to update backup status: %w", err, err_update)
 		}
 		return ctrl.Result{}, err
@@ -169,7 +169,6 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context,sts 
 
 	stsKey := types.NamespacedName {
 		Name: backup.Spec.StatefulSetRef.Name,
-		Namespace: backup.Spec.StatefulSetRef.Namespace,
 	}
 
 	for i := 0; i < int(*sts.Spec.Replicas); i++ {

@@ -130,7 +130,7 @@ func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context
 // restoreSnapshots performs the actual restoration of PVCs from snapshots.
 // For each snapshot, it deletes the existing PVC and recreates it with the snapshot as data source.
 // This allows the PVC to be populated with data from the snapshot.
-func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot) (error) {
+func (r *StatefulSetRestoreReconciler)restoreSnapshots(ctx context.Context, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot) (error) {
 	logger := logf.FromContext(ctx)
 	for _, snapshot := range snapshots {
 		if snapshot.Spec.Source.PersistentVolumeClaimName == nil {
@@ -235,7 +235,7 @@ func (r *StatefulSetRestoreReconciler) handleRestoring(ctx context.Context, rest
 		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "SnapshotsNotFound", fmt.Sprintf("Failed to find snapshots: %v", err))
 	}
 
-	err = r.restoreSnapshots(ctx, restore, sts, snapshots)
+	err = r.restoreSnapshots(ctx, sts, snapshots)
 	if err != nil {
 		r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "RestoreFailed", "Some snaphosts failed to restore")
 		return ctrl.Result{}, err
