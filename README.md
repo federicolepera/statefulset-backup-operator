@@ -112,7 +112,26 @@ spec:
     namespace: default
   retentionPolicy:
     keepLast: 3
-  volumeSnapshotClass: csi-hostpath-snapclass
+  volumeSnapshotClassName: csi-hostpath-snapclass  # Optional: uses cluster default if not specified
+```
+
+**Note on VolumeSnapshotClass**: The `volumeSnapshotClassName` field is optional. If not specified, the operator will automatically use the default VolumeSnapshotClass in your cluster (the one with annotation `snapshot.storage.kubernetes.io/is-default-class: "true"`). This makes the operator work out-of-the-box on most Kubernetes clusters without additional configuration.
+
+You can also omit the `volumeSnapshotClassName` field entirely:
+
+```yaml
+apiVersion: backup.sts-backup.io/v1alpha1
+kind: StatefulSetBackup
+metadata:
+  name: my-database-backup-auto
+  namespace: default
+spec:
+  statefulSetRef:
+    name: postgresql
+    namespace: default
+  retentionPolicy:
+    keepLast: 3
+  # volumeSnapshotClassName omitted - will use cluster default
 ```
 
 ### Scheduled Backup with Hooks
@@ -143,7 +162,7 @@ spec:
     command:
       - "echo"
       - "Backup completed"
-  volumeSnapshotClass: csi-hostpath-snapclass
+  volumeSnapshotClassName: csi-hostpath-snapclass
 ```
 
 ### Restore from Backup
@@ -263,9 +282,6 @@ The following features are currently under development or planned:
 - ⚠️ **Error Handling** - Some error scenarios need improved handling
   - Status updates may not always reflect failures
   - PVC deletion during restore needs better wait logic
-
-- ⚠️ **VolumeSnapshotClass** - Currently hardcoded to `csi-hostpath-snapclass`
-  - Fix planned: Make configurable via CRD spec
 
 - ⚠️ **Cross-Namespace** - Backup and target StatefulSet must be in same namespace
   - Enhancement planned: Support cross-namespace operations
@@ -398,7 +414,7 @@ spec:
     keepLast: 8  # Keep 48 hours of backups
   preBackupHook:
     command: ["psql", "-U", "postgres", "-c", "CHECKPOINT"]
-  volumeSnapshotClass: csi-hostpath-snapclass
+  volumeSnapshotClassName: csi-hostpath-snapclass
 ```
 
 ### Example 2: MongoDB Backup with Replica Sync
@@ -425,7 +441,7 @@ spec:
       - "mongosh"
       - "--eval"
       - "db.fsyncUnlock()"
-  volumeSnapshotClass: csi-hostpath-snapclass
+  volumeSnapshotClassName: csi-hostpath-snapclass
 ```
 
 ### Example 3: Redis Cluster Backup
@@ -444,7 +460,7 @@ spec:
     keepLast: 12  # Keep 6 hours of backups
   preBackupHook:
     command: ["redis-cli", "BGSAVE"]
-  volumeSnapshotClass: csi-hostpath-snapclass
+  volumeSnapshotClassName: csi-hostpath-snapclass
 ```
 
 ## 🤝 Contributing
@@ -500,6 +516,7 @@ If you find this project useful, please consider giving it a star! It helps the 
 - ✅ GitHub Actions CI integration for automated testing
 - ✅ Test documentation with detailed coverage information
 - ✅ CI-compatible tests that run without VolumeSnapshot CRDs
+- ✅ Automatic default VolumeSnapshotClass detection - operator now automatically uses the cluster's default VolumeSnapshotClass if not explicitly specified
 
 **Test Coverage:**
 - StatefulSetBackup Controller: 15 tests covering manual/scheduled backups, cron validation, status management, and resource lifecycle
