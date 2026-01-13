@@ -657,6 +657,7 @@ If you find this project useful, please consider giving it a star! It helps the 
 - ✅ GitHub Actions CI integration for automated testing
 - ✅ Test documentation with detailed coverage information
 - ✅ CI-compatible tests that run without VolumeSnapshot CRDs
+- ✅ Automatic default VolumeSnapshotClass detection - operator now automatically uses the cluster's default VolumeSnapshotClass if not explicitly specified
 
 **Test Coverage:**
 - StatefulSetBackup Controller: 15 tests covering manual/scheduled backups, cron validation, status management, and resource lifecycle

@@ -6,4 +6,18 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: statefulsetbackup-sample
 spec:
-  # TODO(user): Add fields here
+  statefulSetRef:
+    name: postgresql
+    namespace: default
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retentionPolicy:
+    keepLast: 7
+  # volumeSnapshotClassName: csi-hostpath-snapclass  # Optional: omit to use cluster default
+  preBackupHook:
+    command:
+      - "echo"
+      - "Starting backup"
+  postBackupHook:
+    command:
+      - "echo"
+      - "Backup completed"
