@@ -143,9 +143,27 @@ spec:
     namespace: default
   retentionPolicy:
     keepLast: 3  # Keep last 3 snapshots per PVC
+  volumeSnapshotClassName: csi-hostpath-snapclass  # Optional: omit to use cluster default
 ```
 
-> **Note**: VolumeSnapshotClass is currently hardcoded to `csi-hostpath-snapclass` in the operator. Configuration via CRD spec is planned for a future release.
+**Note on VolumeSnapshotClass**: The `volumeSnapshotClassName` field is optional. If not specified, the operator will automatically use the default VolumeSnapshotClass in your cluster (the one with annotation `snapshot.storage.kubernetes.io/is-default-class: "true"`). This makes the operator work out-of-the-box on most Kubernetes clusters without additional configuration.
+
+You can also omit the `volumeSnapshotClassName` field entirely:
+
+```yaml
+apiVersion: backup.sts-backup.io/v1alpha1
+kind: StatefulSetBackup
+metadata:
+  name: my-database-backup-auto
+  namespace: default
+spec:
+  statefulSetRef:
+    name: postgresql
+    namespace: default
+  retentionPolicy:
+    keepLast: 3
+  # volumeSnapshotClassName omitted - will use cluster default
+```
 
 ### Scheduled Backup with Hooks
 
@@ -164,6 +182,7 @@ spec:
   schedule: "0 2 * * *"  # Every day at 2 AM (standard cron format)
   retentionPolicy:
     keepLast: 7  # Keep last 7 backups per PVC
+  volumeSnapshotClassName: csi-hostpath-snapclass  # Optional
   preBackupHook:
     containerName: postgres  # Optional: specify container (defaults to first container)
     command:
@@ -384,11 +403,6 @@ retentionPolicy:
 The following features are currently under development or planned:
 
 ### Current Limitations
-
-- ⚠️ **VolumeSnapshotClass Hardcoded** - Currently fixed to `csi-hostpath-snapclass`
-  - Cannot be configured via CRD spec
-  - Workaround: Modify controller source code
-  - Fix planned: Make configurable via CRD field
 
 - ⚠️ **Hook Timeout** - No timeout configuration for pre/post backup hooks
   - Hooks can hang indefinitely if command doesn't complete
