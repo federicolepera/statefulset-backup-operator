@@ -371,7 +371,28 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context, sts *
 			}
 
 			snapshotName := fmt.Sprintf("%s-%s-%d-%d", backup.Name, vct.Name, time.Now().Unix(), i)
-			snapshotClassName := "csi-hostpath-snapclass"
+
+			// Determine the VolumeSnapshotClassName to use
+			var snapshotClassName string
+			if backup.Spec.VolumeSnapshotClassName != "" {
+				// Use the explicitly specified VolumeSnapshotClassName
+				snapshotClassName = backup.Spec.VolumeSnapshotClassName
+			} else {
+				// Get the default VolumeSnapshotClass from the cluster
+				defaultClass, err := r.getDefaultVolumeSnapshotClass(ctx)
+				if err != nil {
+					err := fmt.Errorf("failed to get default VolumeSnapshotClass: %w", err)
+					logger.Error(err, "Failed to get default VolumeSnapshotClass")
+					return nil, err
+				}
+				if defaultClass == "" {
+					err := fmt.Errorf("no default VolumeSnapshotClass found in cluster")
+					logger.Error(err, "Cannot create snapshot without VolumeSnapshotClass")
+					return nil, err
+				}
+				snapshotClassName = defaultClass
+				logger.Info("Using default VolumeSnapshotClass", "class", snapshotClassName)
+			}
 			snapshot := &snapshotv1.VolumeSnapshot{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      snapshotName,
@@ -389,7 +410,6 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context, sts *
 				},
 			}
 
-			// FIX-ME: Currently not possible to specify snapshot class, using default
 			if err := r.Create(ctx, snapshot); err != nil {
 				logger.Error(err, "Failed to create snapshot", "snapshot", snapshotName)
 				return nil, err
@@ -464,6 +484,32 @@ func (r *StatefulSetBackupReconciler) updateRestoreStatus(ctx context.Context, b
 		return fmt.Errorf("failed to update backup status: %w", err)
 	}
 	return nil
+}
+
+// getDefaultVolumeSnapshotClass retrieves the default VolumeSnapshotClass from the cluster.
+// It searches for a VolumeSnapshotClass with the annotation "snapshot.storage.kubernetes.io/is-default-class: true".
+// Returns the name of the default class, or an empty string if no default is found.
+func (r *StatefulSetBackupReconciler) getDefaultVolumeSnapshotClass(ctx context.Context) (string, error) {
+	logger := logf.FromContext(ctx)
+
+	// List all VolumeSnapshotClasses in the cluster
+	volumeSnapshotClassList := &snapshotv1.VolumeSnapshotClassList{}
+	if err := r.List(ctx, volumeSnapshotClassList); err != nil {
+		logger.Error(err, "Failed to list VolumeSnapshotClasses")
+		return "", fmt.Errorf("failed to list VolumeSnapshotClasses: %w", err)
+	}
+
+	// Find the VolumeSnapshotClass with the default annotation
+	for _, vsc := range volumeSnapshotClassList.Items {
+		if vsc.Annotations != nil {
+			if isDefault, exists := vsc.Annotations["snapshot.storage.kubernetes.io/is-default-class"]; exists && isDefault == "true" {
+				logger.Info("Found default VolumeSnapshotClass", "name", vsc.Name)
+				return vsc.Name, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no default VolumeSnapshotClass found in cluster")
 }
 
 // SetupWithManager sets up the controller with the Manager.

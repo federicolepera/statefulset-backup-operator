@@ -52,6 +52,10 @@ type StatefulSetBackupSpec struct {
 	// +optional
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef,omitempty"`
 
+	// VolumeSnapshotClassName is the VolumeSnapshotClass to use for creating volume snapshots
+	// +optional
+	VolumeSnapshotClassName string `json:"volumeSnapshotClassName,omitempty"`
+
 	// Schedule is a cron expression for scheduled backups (e.g., "0 2 * * *" for daily at 2 AM)
 	// If empty, the backup is created only once manually
 	// +optional
