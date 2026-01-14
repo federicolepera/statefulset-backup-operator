@@ -45,6 +45,12 @@ spec:
                   BackupName specifies the name of the backup to restore from
                   If not specified, use UseLatestBackup instead
                 type: string
+              pvcDeletionTimeoutSeconds:
+                description: |-
+                  PvcDeletionTimeoutSeconds specifies the timeout for PVC deletion during restore
+                  Default: 60 seconds
+                format: int64
+                type: integer
               scaleDown:
                 description: |-
                   ScaleDown determines whether to scale the StatefulSet to 0 before restore

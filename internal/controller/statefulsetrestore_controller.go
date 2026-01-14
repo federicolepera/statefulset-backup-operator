@@ -132,7 +132,7 @@ func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context
 // restoreSnapshots performs the actual restoration of PVCs from snapshots.
 // For each snapshot, it deletes the existing PVC and recreates it with the snapshot as data source.
 // This allows the PVC to be populated with data from the snapshot.
-func (r *StatefulSetRestoreReconciler) restoreSnapshots(ctx context.Context, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot) error {
+func (r *StatefulSetRestoreReconciler) restoreSnapshots(ctx context.Context, sts *appsv1.StatefulSet, snapshots []snapshotv1.VolumeSnapshot, pvcDeletionTimeoutSeconds *int64) error {
 	logger := logf.FromContext(ctx)
 	for _, snapshot := range snapshots {
 		if snapshot.Spec.Source.PersistentVolumeClaimName == nil {
@@ -158,6 +158,9 @@ func (r *StatefulSetRestoreReconciler) restoreSnapshots(ctx context.Context, sts
 		// Wait for PVC deletion to complete (poll until it's gone)
 		logger.Info("Waiting for PVC deletion to complete", "pvc", pvcKey.Name)
 		deletionTimeout := 60 * time.Second
+		if pvcDeletionTimeoutSeconds != nil {
+			deletionTimeout = time.Duration(*pvcDeletionTimeoutSeconds) * time.Second
+		}
 		pollInterval := 2 * time.Second
 		startTime := time.Now()
 
@@ -268,7 +271,7 @@ func (r *StatefulSetRestoreReconciler) handleRestoring(ctx context.Context, rest
 		}
 	}
 
-	err = r.restoreSnapshots(ctx, sts, snapshots)
+	err = r.restoreSnapshots(ctx, sts, snapshots, restore.Spec.PvcDeletionTimeoutSeconds)
 	if err != nil {
 		if err_update := r.updateRestoreStatus(ctx, restore, backupv1alpha1.RestorePhaseFailed, "RestoreFailed", "Some snaphosts failed to restore"); err_update != nil {
 			logger.Error(err_update, "Failed to update restore status")

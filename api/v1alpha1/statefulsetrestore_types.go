@@ -46,6 +46,11 @@ type StatefulSetRestoreSpec struct {
 	// Default: true (recommended for consistency)
 	// +optional
 	ScaleDown *bool `json:"scaleDown,omitempty"`
+
+	// PvcDeletionTimeoutSeconds specifies the timeout for PVC deletion during restore
+	// Default: 60 seconds
+	// +optional
+	PvcDeletionTimeoutSeconds *int64 `json:"pvcDeletionTimeoutSeconds,omitempty"`
 }
 
 // StatefulSetRestoreStatus defines the observed state of the restore operation.
