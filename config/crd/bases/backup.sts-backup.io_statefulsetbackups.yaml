@@ -54,6 +54,11 @@ spec:
                     description: ContainerName specifies the container in which to
                       run the command (optional)
                     type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds specifies the timeout for the command
+                      execution (optional)
+                    format: int64
+                    type: integer
                 type: object
               preBackupHook:
                 description: |-
@@ -70,6 +75,11 @@ spec:
                     description: ContainerName specifies the container in which to
                       run the command (optional)
                     type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds specifies the timeout for the command
+                      execution (optional)
+                    format: int64
+                    type: integer
                 type: object
               retentionPolicy:
                 description: RetentionPolicy specifies how many backups to keep
