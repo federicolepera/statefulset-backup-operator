@@ -4,7 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20%2B-brightgreen.svg)](https://kubernetes.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/federicolepera/statefulset-backup-operator)](https://goreportcard.com/report/github.com/federicolepera/statefulset-backup-operator)
 
-> ⚠️ **Work in Progress** - Version 0.0.3
+> ⚠️ **Work in Progress** - Version 0.0.4
 > This operator is under active development. APIs may change, and some features are still being implemented.
 
 A Kubernetes operator for automated backup and restore of StatefulSets using native VolumeSnapshot APIs. Features scheduled snapshots, retention policies, pre/post hooks, and point-in-time recovery with a simple declarative interface.
@@ -185,6 +185,7 @@ spec:
   volumeSnapshotClassName: csi-hostpath-snapclass  # Optional
   preBackupHook:
     containerName: postgres  # Optional: specify container (defaults to first container)
+    timeoutSeconds: 120      # Optional: timeout in seconds (default: 60)
     command:
       - "psql"
       - "-U"
@@ -201,7 +202,7 @@ spec:
 - Hooks execute **sequentially** on each pod (pod-0, then pod-1, etc.)
 - If a hook fails on any pod, the entire backup fails
 - Hooks execute in the first container unless `containerName` is specified
-- No timeout is currently configured for hooks
+- Default timeout is 60 seconds; configure with `timeoutSeconds` field
 
 ### Restore from Backup
 
@@ -427,11 +428,6 @@ The following features are currently under development or planned:
 
 ### Current Limitations
 
-- ⚠️ **Hook Timeout** - No timeout configuration for pre/post backup hooks
-  - Hooks can hang indefinitely if command doesn't complete
-  - Workaround: Ensure hook commands have internal timeouts
-  - Enhancement planned: Add `timeoutSeconds` field to hook specification
-
 - ⚠️ **Cross-Namespace Operations** - Backup and target StatefulSet must be in same namespace
   - Cross-namespace snapshots not supported
   - Enhancement planned: Support cross-namespace operations
@@ -461,10 +457,10 @@ The following features are currently under development or planned:
 - [x] CI/CD integration with GitHub Actions (v0.0.2)
 - [x] Time-based retention policy with `keepDays` (v0.0.3)
 - [x] Configurable container selection for hooks (v0.0.3)
+- [x] Hook timeout configuration (v0.0.4)
 - [ ] Combined retention policies (both `keepLast` and `keepDays` together)
 - [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
-- [ ] Hook timeout configuration
 - [ ] Backup verification and integrity checks
 - [ ] Metrics and Prometheus integration
 - [ ] Multi-cluster restore (cross-cluster DR)
@@ -676,9 +672,18 @@ If you find this project useful, please consider giving it a star! It helps the 
 
 ---
 
-**Note**: This operator is in active development (v0.0.3). APIs and features may change. Not recommended for production use until v1.0.0 release.
+**Note**: This operator is in active development (v0.0.4). APIs and features may change. Not recommended for production use until v1.0.0 release.
 
 ## 📊 Changelog
+
+### Version 0.0.4 (2026-01-14)
+
+**New Features:**
+- ✅ Hook timeout configuration - use `timeoutSeconds` field to set custom timeout for pre/post backup hooks (default: 60 seconds)
+
+**Improvements:**
+- Hooks now fail gracefully with clear error message when timeout is exceeded
+- Better error handling for long-running hook commands
 
 ### Version 0.0.3 (2026-01-14)
 

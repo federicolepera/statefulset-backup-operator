@@ -213,7 +213,14 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context, sts
 
 		var stdout, stderr bytes.Buffer
 
-		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		// Default timeout of 60 seconds
+		executionTimeout := time.Duration(int64(60 * time.Second))
+		if backup.Spec.PreBackupHook.TimeoutSeconds != nil {
+			executionTimeout = time.Duration(*backup.Spec.PreBackupHook.TimeoutSeconds)
+		}
+		execCtx, cancel := context.WithTimeout(ctx, executionTimeout)
+		defer cancel()
+		err = exec.StreamWithContext(execCtx, remotecommand.StreamOptions{
 			Stdout: &stdout,
 			Stderr: &stderr,
 		})

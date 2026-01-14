@@ -46,6 +46,9 @@ type BackupHook struct {
 	// ContainerName specifies the container in which to run the command (optional)
 	// +optional
 	ContainerName string `json:"containerName,omitempty"`
+	// TimeoutSeconds specifies the timeout for the command execution (optional)
+	// +optional
+	TimeoutSeconds *int64 `json:"timeoutSeconds,omitempty"`
 }
 
 // StatefulSetBackupSpec defines the desired state of StatefulSetBackup.
