@@ -75,12 +75,8 @@ spec:
                     description: Namespace where the StatefulSet is located
                     type: string
                 type: object
-              useLatestBackup:
-                description: |-
-                  UseLatestBackup restores from the most recent backup
-                  If true, ignores BackupName and uses the latest available backup
-                type: boolean
             required:
+            - backupName
             - statefulSetRef
             type: object
           status:
