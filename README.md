@@ -4,7 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20%2B-brightgreen.svg)](https://kubernetes.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/federicolepera/statefulset-backup-operator)](https://goreportcard.com/report/github.com/federicolepera/statefulset-backup-operator)
 
-> ⚠️ **Work in Progress** - Version 0.0.4
+> ⚠️ **Work in Progress** - Version 0.0.5
 > This operator is under active development. APIs may change, and some features are still being implemented.
 
 A Kubernetes operator for automated backup and restore of StatefulSets using native VolumeSnapshot APIs. Features scheduled snapshots, retention policies, pre/post hooks, and point-in-time recovery with a simple declarative interface.
@@ -220,6 +220,7 @@ spec:
     namespace: production
   backupName: postgres-scheduled-backup
   scaleDown: true  # Recommended: scales StatefulSet to 0 before restore
+  pvcDeletionTimeoutSeconds: 120  # Optional: timeout for PVC deletion (default: 60)
 ```
 
 **Restore Phases:**
@@ -436,11 +437,6 @@ The following features are currently under development or planned:
   - Restore only works with the original source StatefulSet
   - Workaround: Manually copy snapshots and recreate PVCs
 
-- ⚠️ **PVC Deletion Timeout** - Hardcoded to 60 seconds during restore
-  - If PVC takes longer to delete, restore fails
-  - Polls every 2 seconds for deletion completion
-  - Enhancement planned: Make timeout configurable
-
 - ⚠️ **Snapshot Readiness Verification** - Snapshots not verified before applying retention
   - Retention policy is applied immediately after snapshot creation
   - VolumeSnapshot may still be in "Creating" state
@@ -458,6 +454,7 @@ The following features are currently under development or planned:
 - [x] Time-based retention policy with `keepDays` (v0.0.3)
 - [x] Configurable container selection for hooks (v0.0.3)
 - [x] Hook timeout configuration (v0.0.4)
+- [x] Configurable PVC deletion timeout for restore (v0.0.5)
 - [ ] Combined retention policies (both `keepLast` and `keepDays` together)
 - [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
@@ -672,9 +669,18 @@ If you find this project useful, please consider giving it a star! It helps the 
 
 ---
 
-**Note**: This operator is in active development (v0.0.4). APIs and features may change. Not recommended for production use until v1.0.0 release.
+**Note**: This operator is in active development (v0.0.5). APIs and features may change. Not recommended for production use until v1.0.0 release.
 
 ## 📊 Changelog
+
+### Version 0.0.5 (2026-01-14)
+
+**New Features:**
+- ✅ Configurable PVC deletion timeout for restore - use `pvcDeletionTimeoutSeconds` field to set custom timeout (default: 60 seconds)
+
+**Improvements:**
+- Restore operations now support longer PVC deletion times for slow storage backends
+- Clear error messages when PVC deletion times out
 
 ### Version 0.0.4 (2026-01-14)
 
