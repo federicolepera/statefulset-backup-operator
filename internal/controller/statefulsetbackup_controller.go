@@ -214,7 +214,7 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context, sts
 		var stdout, stderr bytes.Buffer
 
 		// Default timeout of 60 seconds
-		executionTimeout := time.Duration(int64(60*time.Second))
+		executionTimeout := time.Duration(int64(60 * time.Second))
 		if backup.Spec.PreBackupHook.TimeoutSeconds != nil {
 			executionTimeout = time.Duration(*backup.Spec.PreBackupHook.TimeoutSeconds)
 		}
