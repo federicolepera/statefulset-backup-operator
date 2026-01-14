@@ -166,6 +166,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 							Name:      statefulSetName,
 							Namespace: namespace,
 						},
+						VolumeSnapshotClassName: "csi-hostpath-snapclass",
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
 							KeepLast: ptr.To(3),
 						},
@@ -219,7 +220,8 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 							Name:      statefulSetName,
 							Namespace: namespace,
 						},
-						Schedule: "0 0 * * *",
+						VolumeSnapshotClassName: "csi-hostpath-snapclass",
+						Schedule:                "0 0 * * *",
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
 							KeepLast: ptr.To(3),
 						},
