@@ -238,7 +238,10 @@ func (r *StatefulSetBackupReconciler) executeBackupHook(ctx context.Context, sts
 // according to the configured retention policy.
 func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context, backup *backupv1alpha1.StatefulSetBackup) error {
 	logger := logf.FromContext(ctx)
-
+	if backup.Spec.RetentionPolicy == (backupv1alpha1.RetentionPolicy{}) {
+		logger.Info("No retention policy defined, skipping cleanup")
+		return nil
+	}
 	// List all snapshots for this policy in the correct namespace
 	snapshotList := &snapshotv1.VolumeSnapshotList{}
 	if err := r.List(ctx, snapshotList,
@@ -248,55 +251,70 @@ func (r *StatefulSetBackupReconciler) applyRetentionPolicy(ctx context.Context, 
 		client.InNamespace(backup.Spec.StatefulSetRef.Namespace)); err != nil {
 		return err
 	}
-
 	if len(snapshotList.Items) == 0 {
 		return nil
 	}
+	if backup.Spec.RetentionPolicy.KeepDays != nil {
+		for _, snapshot := range snapshotList.Items {
+			if snapshot.CreationTimestamp.Time.AddDate(0, 0, *backup.Spec.RetentionPolicy.KeepDays).Before(time.Now()) {
+				logger.Info("Deleting old snapshot based on KeepDays policy",
+					"snapshot", snapshot.Name,
+					"age", time.Since(snapshot.CreationTimestamp.Time))
 
-	// Group snapshots by PVC (each replica has its own PVC)
-	snapshotsByPVC := make(map[string][]snapshotv1.VolumeSnapshot)
-	for _, snapshot := range snapshotList.Items {
-		if snapshot.Spec.Source.PersistentVolumeClaimName != nil {
-			pvcName := *snapshot.Spec.Source.PersistentVolumeClaimName
-			snapshotsByPVC[pvcName] = append(snapshotsByPVC[pvcName], snapshot)
+				if err := r.Delete(ctx, &snapshot); err != nil {
+					logger.Error(err, "Failed to delete old snapshot", "snapshot", snapshot.Name)
+					return fmt.Errorf("failed to delete old snapshot: %w", err)
+				} else {
+					logger.Info("Deleted old snapshot", "snapshot", snapshot.Name)
+				}
+			}
 		}
-	}
-
-	// For each PVC, keep only the last N snapshots
-	for pvcName, pvcSnapshots := range snapshotsByPVC {
-		if len(pvcSnapshots) <= backup.Spec.RetentionPolicy.KeepLast {
-			continue
+	} else {
+		// Group snapshots by PVC (each replica has its own PVC)
+		snapshotsByPVC := make(map[string][]snapshotv1.VolumeSnapshot)
+		for _, snapshot := range snapshotList.Items {
+			if snapshot.Spec.Source.PersistentVolumeClaimName != nil {
+				pvcName := *snapshot.Spec.Source.PersistentVolumeClaimName
+				snapshotsByPVC[pvcName] = append(snapshotsByPVC[pvcName], snapshot)
+			}
 		}
 
-		logger.Info("Applying retention policy",
-			"pvc", pvcName,
-			"total", len(pvcSnapshots),
-			"keepLast", backup.Spec.RetentionPolicy.KeepLast)
+		// For each PVC, keep only the last N snapshots
+		for pvcName, pvcSnapshots := range snapshotsByPVC {
+			if len(pvcSnapshots) <= *backup.Spec.RetentionPolicy.KeepLast {
+				continue
+			}
 
-		// Sort by creation date (oldest to newest)
-		sort.Slice(pvcSnapshots, func(i, j int) bool {
-			return pvcSnapshots[i].CreationTimestamp.Before(&pvcSnapshots[j].CreationTimestamp)
-		})
-
-		// Calculate how many snapshots to delete
-		toDelete := len(pvcSnapshots) - backup.Spec.RetentionPolicy.KeepLast
-
-		// Delete the oldest snapshots
-		for i := 0; i < toDelete; i++ {
-			snapshot := &pvcSnapshots[i]
-			logger.Info("Deleting old snapshot",
-				"snapshot", snapshot.Name,
+			logger.Info("Applying retention policy",
 				"pvc", pvcName,
-				"age", time.Since(snapshot.CreationTimestamp.Time))
+				"total", len(pvcSnapshots),
+				"keepLast", backup.Spec.RetentionPolicy.KeepLast)
 
-			if err := r.Delete(ctx, snapshot); err != nil {
-				logger.Error(err, "Failed to delete old snapshot", "snapshot", snapshot.Name)
-			} else {
-				logger.Info("Deleted old snapshot", "snapshot", snapshot.Name)
+			// Sort by creation date (oldest to newest)
+			sort.Slice(pvcSnapshots, func(i, j int) bool {
+				return pvcSnapshots[i].CreationTimestamp.Before(&pvcSnapshots[j].CreationTimestamp)
+			})
+
+			// Calculate how many snapshots to delete
+			toDelete := len(pvcSnapshots) - *backup.Spec.RetentionPolicy.KeepLast
+
+			// Delete the oldest snapshots
+			for i := 0; i < toDelete; i++ {
+				snapshot := &pvcSnapshots[i]
+				logger.Info("Deleting old snapshot",
+					"snapshot", snapshot.Name,
+					"pvc", pvcName,
+					"age", time.Since(snapshot.CreationTimestamp.Time))
+
+				if err := r.Delete(ctx, snapshot); err != nil {
+					logger.Error(err, "Failed to delete old snapshot", "snapshot", snapshot.Name)
+					return fmt.Errorf("failed to delete old snapshot: %w", err)
+				} else {
+					logger.Info("Deleted old snapshot", "snapshot", snapshot.Name)
+				}
 			}
 		}
 	}
-
 	return nil
 }
 

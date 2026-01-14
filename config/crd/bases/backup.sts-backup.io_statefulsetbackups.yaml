@@ -82,9 +82,11 @@ spec:
                     description: KeepLast specifies how many recent backups to keep
                       per PVC
                     type: integer
-                required:
-                - keepLast
                 type: object
+                x-kubernetes-validations:
+                - message: Exactly one of keepLast or keepDays must be set
+                  rule: (has(self.keepLast) && !has(self.keepDays)) || (!has(self.keepLast)
+                    && has(self.keepDays))
               schedule:
                 description: |-
                   Schedule is a cron expression for scheduled backups (e.g., "0 2 * * *" for daily at 2 AM)
@@ -100,6 +102,10 @@ spec:
                     description: Namespace where the StatefulSet is located
                     type: string
                 type: object
+              volumeSnapshotClassName:
+                description: VolumeSnapshotClassName is the VolumeSnapshotClass to
+                  use for creating volume snapshots
+                type: string
             type: object
           status:
             description: status defines the observed state of StatefulSetBackup

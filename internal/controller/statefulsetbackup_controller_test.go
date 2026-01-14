@@ -69,7 +69,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 							Namespace: namespace,
 						},
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 3,
+							KeepLast: ptr.To(3),
 						},
 					},
 				}
@@ -128,7 +128,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 							Namespace: namespace,
 						},
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 3,
+							KeepLast: ptr.To(3),
 						},
 					},
 				}
@@ -167,7 +167,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 							Namespace: namespace,
 						},
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 3,
+							KeepLast: ptr.To(3),
 						},
 					},
 				}
@@ -221,7 +221,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 						},
 						Schedule: "0 0 * * *",
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 3,
+							KeepLast: ptr.To(3),
 						},
 					},
 				}
@@ -265,7 +265,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 						},
 						Schedule: "invalid-cron",
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 3,
+							KeepLast: ptr.To(3),
 						},
 					},
 				}
@@ -482,7 +482,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 						},
 						Schedule: "0 0 * * *",
 						RetentionPolicy: backupv1alpha1.RetentionPolicy{
-							KeepLast: 5,
+							KeepLast: ptr.To(5),
 						},
 					},
 				}
@@ -495,7 +495,7 @@ var _ = Describe("StatefulSetBackup Controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				Expect(retrieved.Spec.Schedule).To(Equal("0 0 * * *"))
-				Expect(retrieved.Spec.RetentionPolicy.KeepLast).To(Equal(5))
+				Expect(retrieved.Spec.RetentionPolicy.KeepLast).To(HaveValue(Equal(5)))
 
 				Expect(k8sClient.Delete(ctx, backup)).To(Succeed())
 			})
