@@ -4,7 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20%2B-brightgreen.svg)](https://kubernetes.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/federicolepera/statefulset-backup-operator)](https://goreportcard.com/report/github.com/federicolepera/statefulset-backup-operator)
 
-> ⚠️ **Work in Progress** - Version 0.0.5
+> ⚠️ **Work in Progress** - Version 0.0.6
 > This operator is under active development. APIs may change, and some features are still being implemented.
 
 A Kubernetes operator for automated backup and restore of StatefulSets using native VolumeSnapshot APIs. Features scheduled snapshots, retention policies, pre/post hooks, and point-in-time recovery with a simple declarative interface.
@@ -435,11 +435,6 @@ The following features are currently under development or planned:
   - Restore only works with the original source StatefulSet
   - Workaround: Manually copy snapshots and recreate PVCs
 
-- ⚠️ **Snapshot Readiness Verification** - Snapshots not verified before applying retention
-  - Retention policy is applied immediately after snapshot creation
-  - VolumeSnapshot may still be in "Creating" state
-  - Enhancement planned: Wait for ReadyToUse=true before cleanup
-
 ### Roadmap
 
 - [x] Comprehensive unit test suite (v0.0.2)
@@ -448,6 +443,7 @@ The following features are currently under development or planned:
 - [x] Configurable container selection for hooks (v0.0.3)
 - [x] Hook timeout configuration (v0.0.4)
 - [x] Configurable PVC deletion timeout for restore (v0.0.5)
+- [x] Snapshot readiness verification before retention (v0.0.6)
 - [ ] Combined retention policies (both `keepLast` and `keepDays` together)
 - [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
@@ -662,9 +658,19 @@ If you find this project useful, please consider giving it a star! It helps the 
 
 ---
 
-**Note**: This operator is in active development (v0.0.5). APIs and features may change. Not recommended for production use until v1.0.0 release.
+**Note**: This operator is in active development (v0.0.6). APIs and features may change. Not recommended for production use until v1.0.0 release.
 
 ## 📊 Changelog
+
+### Version 0.0.6 (2026-01-15)
+
+**New Features:**
+- ✅ Snapshot readiness verification - operator now waits for snapshots to be `ReadyToUse=true` before proceeding (60 second timeout)
+
+**Improvements:**
+- Retention policy is now only applied after snapshots are confirmed ready
+- Prevents potential data loss from deleting old snapshots before new ones are ready
+- Better reliability for slow storage backends
 
 ### Version 0.0.5 (2026-01-14)
 
