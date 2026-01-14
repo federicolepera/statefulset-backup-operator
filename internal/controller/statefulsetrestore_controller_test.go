@@ -415,8 +415,8 @@ var _ = Describe("StatefulSetRestore Controller", func() {
 							Name:      "test-sts",
 							Namespace: namespace,
 						},
-						BackupName:      "test-backup",
-						ScaleDown:       ptr.To(true),
+						BackupName: "test-backup",
+						ScaleDown:  ptr.To(true),
 					},
 				}
 

@@ -440,11 +440,39 @@ func (r *StatefulSetBackupReconciler) createSnapshots(ctx context.Context, sts *
 				return nil, err
 			}
 
+			// Wait for snapshot to be ready
+			readinessTimeout := 60 * time.Second
+			pollInterval := 2 * time.Second
+			startTime := time.Now()
+			snapshotKey := types.NamespacedName{Name: snapshotName, Namespace: sts.Namespace}
+
+			for {
+				// Re-fetch snapshot to get updated status
+				if err := r.Get(ctx, snapshotKey, snapshot); err != nil {
+					logger.Error(err, "Failed to get snapshot status", "snapshot", snapshotName)
+					return nil, err
+				}
+
+				// Check if VolumeSnapshot is ready to use
+				if snapshot.Status != nil && snapshot.Status.ReadyToUse != nil && *snapshot.Status.ReadyToUse {
+					logger.Info("Snapshot is ready to use", "snapshot", snapshotName)
+					break
+				}
+
+				// Check timeout
+				if time.Since(startTime) > readinessTimeout {
+					return nil, fmt.Errorf("timeout waiting for snapshot %s to become ready after %v", snapshotName, readinessTimeout)
+				}
+
+				// Wait before next check
+				time.Sleep(pollInterval)
+			}
+
 			snapshots = append(snapshots, backupv1alpha1.SnapshotInfo{
 				Name:         snapshotName,
 				CreationTime: metav1.Now(),
 				PVCName:      pvcName,
-				ReadyToUse:   false,
+				ReadyToUse:   true,
 			})
 
 			logger.Info("Created snapshot", "snapshot", snapshotName, "pvc", pvcName)
