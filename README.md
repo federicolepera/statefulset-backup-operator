@@ -161,7 +161,7 @@ spec:
     name: postgresql
     namespace: default
   retentionPolicy:
-    keepLast: 3
+    keepLast: 3  # Keep last 3 snapshots per PVC
   # volumeSnapshotClassName omitted - will use cluster default
 ```
 
@@ -181,7 +181,7 @@ spec:
     namespace: production
   schedule: "0 2 * * *"  # Every day at 2 AM (standard cron format)
   retentionPolicy:
-    keepLast: 7  # Keep last 7 backups per PVC
+    keepDays: 30   # Keep backups for 30 days
   volumeSnapshotClassName: csi-hostpath-snapclass  # Optional
   preBackupHook:
     containerName: postgres  # Optional: specify container (defaults to first container)
@@ -382,21 +382,44 @@ Example: `data-postgresql-0`
 
 ### Retention Policy
 
-Retention policies are **per-PVC**, meaning:
+The operator supports two types of retention policies. **Note**: Currently, you can specify either `keepLast` OR `keepDays`, but not both together.
+
+#### Count-Based Retention (`keepLast`)
+Keeps the most recent N snapshots **per PVC**:
 - With 3 replicas and `keepLast: 2`
 - Each PVC maintains its own 2 most recent snapshots
 - Total snapshots: 6 (2 per PVC)
 - Old snapshots are deleted based on creation timestamp (oldest first)
 
-This ensures you can always restore all replicas to the same point in time.
-
-**Configuration:**
 ```yaml
 retentionPolicy:
   keepLast: 5  # Keep last 5 snapshots per PVC
 ```
 
-> **Note**: The `keepDays` field exists in the CRD but is not yet implemented. Only `keepLast` is currently functional.
+**Use cases:**
+- You want a fixed number of recent backups regardless of age
+- Example: Keep last 7 daily backups (1 week of history)
+- Example: Keep last 24 hourly backups (24 hours of history)
+
+#### Time-Based Retention (`keepDays`)
+Deletes all snapshots older than N days:
+- Applies to **all snapshots** regardless of PVC
+- Calculates age from snapshot creation timestamp
+- Example: `keepDays: 14` deletes snapshots older than 2 weeks
+
+```yaml
+retentionPolicy:
+  keepDays: 14  # Keep snapshots from the last 14 days
+```
+
+**Use cases:**
+- You want to enforce a maximum retention period
+- Compliance requirements (e.g., "keep backups for 30 days")
+- Cost management (limit storage by time)
+- Example: Daily backups with 2 week retention
+- Example: Hourly backups with 1 day retention
+
+> **Future Enhancement**: Support for combining both policies (e.g., `keepLast: 3` with `keepDays: 7`) is planned for a future release.
 
 ## 🚧 Work in Progress
 
@@ -436,15 +459,12 @@ The following features are currently under development or planned:
   - Implementation planned for next release
   - Use `backupName` or `snapshotNames` instead
 
-- ⚠️ **Feature Not Implemented** - `keepDays` retention policy not functional
-  - Field exists in RetentionPolicy but has no effect
-  - Only `keepLast` is currently implemented
-  - Time-based retention planned for future release
-
 ### Roadmap
 
 - [x] Comprehensive unit test suite (v0.0.2)
 - [x] CI/CD integration with GitHub Actions (v0.0.2)
+- [x] Time-based retention policy with `keepDays` (v0.0.3)
+- [ ] Combined retention policies (both `keepLast` and `keepDays` together)
 - [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
 - [ ] Configurable container selection for hooks
@@ -566,7 +586,7 @@ spec:
     namespace: databases
   schedule: "0 */6 * * *"  # Every 6 hours
   retentionPolicy:
-    keepLast: 8  # Keep 48 hours of backups (8 snapshots per PVC)
+    keepDays: 7   # Keep snapshots for 7 days
   preBackupHook:
     containerName: postgres
     command: ["psql", "-U", "postgres", "-c", "CHECKPOINT"]
@@ -585,7 +605,7 @@ spec:
     namespace: databases
   schedule: "0 3 * * *"  # Daily at 3 AM
   retentionPolicy:
-    keepLast: 7  # Keep last 7 snapshots per PVC
+    keepDays: 14   # Keep 2 weeks of backups
   preBackupHook:
     containerName: mongodb
     command:
@@ -612,7 +632,7 @@ spec:
     namespace: cache
   schedule: "*/30 * * * *"  # Every 30 minutes
   retentionPolicy:
-    keepLast: 12  # Keep 6 hours of backups (12 snapshots per PVC)
+    keepLast: 12  # Keep last 12 snapshots per PVC (6 hours of backups)
   preBackupHook:
     containerName: redis
     command: ["redis-cli", "BGSAVE"]
