@@ -416,7 +416,6 @@ var _ = Describe("StatefulSetRestore Controller", func() {
 							Namespace: namespace,
 						},
 						BackupName:      "test-backup",
-						UseLatestBackup: false,
 						ScaleDown:       ptr.To(true),
 					},
 				}
@@ -429,7 +428,6 @@ var _ = Describe("StatefulSetRestore Controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				Expect(retrieved.Spec.BackupName).To(Equal("test-backup"))
-				Expect(retrieved.Spec.UseLatestBackup).To(BeFalse())
 				Expect(*retrieved.Spec.ScaleDown).To(BeTrue())
 
 				Expect(k8sClient.Delete(ctx, restore)).To(Succeed())

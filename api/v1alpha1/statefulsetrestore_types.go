@@ -27,13 +27,7 @@ type StatefulSetRestoreSpec struct {
 
 	// BackupName specifies the name of the backup to restore from
 	// If not specified, use UseLatestBackup instead
-	// +optional
-	BackupName string `json:"backupName,omitempty"`
-
-	// UseLatestBackup restores from the most recent backup
-	// If true, ignores BackupName and uses the latest available backup
-	// +optional
-	UseLatestBackup bool `json:"useLatestBackup,omitempty"`
+	BackupName string `json:"backupName"`
 
 	// SnapshotNames specifies a list of specific snapshots to restore (one per PVC)
 	// Example: ["nginx-backup-1234567890-data-0", "nginx-backup-1234567890-data-1"]

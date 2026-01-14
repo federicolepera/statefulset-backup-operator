@@ -103,9 +103,6 @@ func (r *StatefulSetRestoreReconciler) Reconcile(ctx context.Context, req ctrl.R
 func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore) ([]snapshotv1.VolumeSnapshot, error) {
 	logger := logf.FromContext(ctx)
 
-	if restore.Spec.BackupName == "" && !restore.Spec.UseLatestBackup {
-		return nil, fmt.Errorf("either backupName or useLatestBackup must be specified")
-	}
 	// Case 1: restore spec contains a specific backup name
 	if restore.Spec.BackupName != "" {
 		logger.Info("Search snapshot for StatefulSet " + restore.Spec.StatefulSetRef.Name + "backup with " + restore.Spec.BackupName)

@@ -251,8 +251,6 @@ spec:
   scaleDown: true
 ```
 
-> **Note**: The `useLatestBackup` field is defined in the CRD but not yet implemented. Use `backupName` or `snapshotNames` for restores.
-
 ## 🔍 Monitoring
 
 ### Check Backup Status
@@ -376,7 +374,7 @@ Example: `data-postgresql-0`
 
 1. **New Restore** validates the restore request and saves original replica count
 2. **Scale Down** scales StatefulSet to 0 replicas (if enabled)
-3. **Find Snapshots** locates snapshots to restore based on backupName or useLatestBackup
+3. **Find Snapshots** locates snapshots to restore based on backupName
 4. **Delete PVCs** removes existing PVCs for each replica
 5. **Recreate PVCs** creates new PVCs from VolumeSnapshots
 6. **Scale Up** restores StatefulSet to original replica count
@@ -441,11 +439,6 @@ The following features are currently under development or planned:
   - Retention policy is applied immediately after snapshot creation
   - VolumeSnapshot may still be in "Creating" state
   - Enhancement planned: Wait for ReadyToUse=true before cleanup
-
-- ⚠️ **Feature Not Implemented** - `useLatestBackup` field exists but doesn't work
-  - Field is defined in StatefulSetRestore CRD
-  - Implementation planned for next release
-  - Use `backupName` or `snapshotNames` instead
 
 ### Roadmap
 
