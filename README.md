@@ -4,7 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20%2B-brightgreen.svg)](https://kubernetes.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/federicolepera/statefulset-backup-operator)](https://goreportcard.com/report/github.com/federicolepera/statefulset-backup-operator)
 
-> ⚠️ **Work in Progress** - Version 0.0.2
+> ⚠️ **Work in Progress** - Version 0.0.3
 > This operator is under active development. APIs may change, and some features are still being implemented.
 
 A Kubernetes operator for automated backup and restore of StatefulSets using native VolumeSnapshot APIs. Features scheduled snapshots, retention policies, pre/post hooks, and point-in-time recovery with a simple declarative interface.
@@ -432,10 +432,6 @@ The following features are currently under development or planned:
   - Workaround: Ensure hook commands have internal timeouts
   - Enhancement planned: Add `timeoutSeconds` field to hook specification
 
-- ⚠️ **Hook Container Selection** - Defaults to first container in pod
-  - Use `containerName` field in hook spec to override
-  - If container name is invalid, hook execution fails
-
 - ⚠️ **Cross-Namespace Operations** - Backup and target StatefulSet must be in same namespace
   - Cross-namespace snapshots not supported
   - Enhancement planned: Support cross-namespace operations
@@ -464,10 +460,10 @@ The following features are currently under development or planned:
 - [x] Comprehensive unit test suite (v0.0.2)
 - [x] CI/CD integration with GitHub Actions (v0.0.2)
 - [x] Time-based retention policy with `keepDays` (v0.0.3)
+- [x] Configurable container selection for hooks (v0.0.3)
 - [ ] Combined retention policies (both `keepLast` and `keepDays` together)
 - [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
-- [ ] Configurable container selection for hooks
 - [ ] Hook timeout configuration
 - [ ] Backup verification and integrity checks
 - [ ] Metrics and Prometheus integration
@@ -680,9 +676,19 @@ If you find this project useful, please consider giving it a star! It helps the 
 
 ---
 
-**Note**: This operator is in active development (v0.0.2). APIs and features may change. Not recommended for production use until v1.0.0 release.
+**Note**: This operator is in active development (v0.0.3). APIs and features may change. Not recommended for production use until v1.0.0 release.
 
 ## 📊 Changelog
+
+### Version 0.0.3 (2026-01-14)
+
+**New Features:**
+- ✅ Time-based retention policy with `keepDays` - delete snapshots older than N days
+- ✅ Configurable container selection for hooks - use `containerName` field to specify which container to run hooks in
+
+**Improvements:**
+- Enhanced retention policy documentation with use cases and examples
+- Updated all examples to showcase new retention options
 
 ### Version 0.0.2 (2026-01-12)
 
