@@ -29,9 +29,11 @@ type StatefulSetRef struct {
 }
 
 // RetentionPolicy defines how long backups should be retained.
+// +kubebuilder:validation:XValidation:rule="(has(self.keepLast) && !has(self.keepDays)) || (!has(self.keepLast) && has(self.keepDays))",message="Exactly one of keepLast or keepDays must be set"
 type RetentionPolicy struct {
 	// KeepLast specifies how many recent backups to keep per PVC
-	KeepLast int `json:"keepLast"`
+	// +optional
+	KeepLast *int `json:"keepLast,omitempty"`
 	// KeepDays specifies how many days to keep backups (optional, not yet implemented)
 	// +optional
 	KeepDays *int `json:"keepDays,omitempty"`
