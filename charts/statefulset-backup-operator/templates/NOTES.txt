@@ -1,0 +1,41 @@
+StatefulSet Backup Operator has been installed!
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+To verify the installation:
+  kubectl get deployment -n {{ .Release.Namespace }} {{ include "statefulset-backup-operator.fullname" . }}
+
+To create a backup:
+  cat <<EOF | kubectl apply -f -
+  apiVersion: backup.sts-backup.io/v1alpha1
+  kind: StatefulSetBackup
+  metadata:
+    name: my-backup
+    namespace: default
+  spec:
+    statefulSetRef:
+      name: my-statefulset
+      namespace: default
+    volumeSnapshotClassName: csi-hostpath-snapclass  # Optional: uses default if not specified
+    retentionPolicy:
+      keepLast: 5
+  EOF
+
+To create a restore:
+  cat <<EOF | kubectl apply -f -
+  apiVersion: backup.sts-backup.io/v1alpha1
+  kind: StatefulSetRestore
+  metadata:
+    name: my-restore
+    namespace: default
+  spec:
+    statefulSetRef:
+      name: my-statefulset
+      namespace: default
+    backupName: my-backup
+    scaleDown: true
+  EOF
+
+For more information, visit:
+  https://github.com/federicolepera/statefulset-backup-operator

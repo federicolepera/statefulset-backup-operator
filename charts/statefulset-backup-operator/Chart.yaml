@@ -1,0 +1,18 @@
+apiVersion: v2
+name: statefulset-backup-operator
+description: A Kubernetes operator for backing up and restoring StatefulSets using VolumeSnapshots
+type: application
+version: 0.1.0
+appVersion: "0.0.7"
+keywords:
+  - kubernetes
+  - operator
+  - statefulset
+  - backup
+  - restore
+  - volumesnapshot
+home: https://github.com/federicolepera/statefulset-backup-operator
+sources:
+  - https://github.com/federicolepera/statefulset-backup-operator
+maintainers:
+  - name: Federico Lepera

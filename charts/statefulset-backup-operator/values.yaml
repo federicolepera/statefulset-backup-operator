@@ -1,0 +1,64 @@
+# Default values for statefulset-backup-operator
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/federicolepera/statefulset-backup-operator
+  tag: ""  # Defaults to appVersion if not set
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Leader election configuration
+leaderElection:
+  enabled: true
+
+# Logging configuration
+logging:
+  level: info  # debug, info, error
+
+# Metrics configuration
+metrics:
+  enabled: true
+  port: 8080
+
+# Health probes configuration
+health:
+  port: 8081
