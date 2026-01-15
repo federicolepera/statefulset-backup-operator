@@ -1,0 +1,162 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "statefulset-backup-operator.fullname" . }}
+  labels:
+    {{- include "statefulset-backup-operator.labels" . | nindent 4 }}
+rules:
+  # StatefulSet permissions
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets/scale
+    verbs:
+      - get
+      - update
+      - patch
+  # VolumeSnapshot permissions
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshots
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # VolumeSnapshotClass permissions
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshotclasses
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  # VolumeSnapshotContent permissions (needed to check snapshot status)
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshotcontents
+    verbs:
+      - get
+      - list
+      - watch
+  # PersistentVolumeClaim permissions
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # Pod permissions (needed for hooks execution)
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+    verbs:
+      - create
+  # Events permissions (for recording events)
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  # StatefulSetBackup CRD permissions
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetbackups
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetbackups/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetbackups/finalizers
+    verbs:
+      - update
+  # StatefulSetRestore CRD permissions
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetrestores
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetrestores/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - backup.sts-backup.io
+    resources:
+      - statefulsetrestores/finalizers
+    verbs:
+      - update
+  # Coordination for leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
