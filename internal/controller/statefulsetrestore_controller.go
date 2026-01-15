@@ -103,27 +103,21 @@ func (r *StatefulSetRestoreReconciler) Reconcile(ctx context.Context, req ctrl.R
 func (r *StatefulSetRestoreReconciler) findSnapshotToRestore(ctx context.Context, restore *backupv1alpha1.StatefulSetRestore) ([]snapshotv1.VolumeSnapshot, error) {
 	logger := logf.FromContext(ctx)
 
-	// Case 1: restore spec contains a specific backup name
-	if restore.Spec.BackupName != "" {
-		logger.Info("Search snapshot for StatefulSet " + restore.Spec.StatefulSetRef.Name + "backup with " + restore.Spec.BackupName)
-		snapshotList := &snapshotv1.VolumeSnapshotList{}
-		labels := client.MatchingLabels{
-			"backup.sts-backup.io/policy":      restore.Spec.BackupName,
-			"backup.sts-backup.io/statefulset": restore.Spec.StatefulSetRef.Name,
-		}
-		if err := r.List(ctx, snapshotList, labels, client.InNamespace(restore.Spec.StatefulSetRef.Namespace)); err != nil {
-			return nil, err
-		}
-
-		if len(snapshotList.Items) == 0 {
-			return nil, fmt.Errorf("no snapshots found for StatefulSet %s", restore.Spec.StatefulSetRef.Name)
-		}
-
-		return snapshotList.Items, nil
+	logger.Info("Search snapshot for StatefulSet " + restore.Spec.StatefulSetRef.Name + "backup with " + restore.Spec.BackupName)
+	snapshotList := &snapshotv1.VolumeSnapshotList{}
+	labels := client.MatchingLabels{
+		"backup.sts-backup.io/policy":      restore.Spec.BackupName,
+		"backup.sts-backup.io/statefulset": restore.Spec.StatefulSetRef.Name,
+	}
+	if err := r.List(ctx, snapshotList, labels, client.InNamespace(restore.Spec.StatefulSetRef.Namespace)); err != nil {
+		return nil, err
 	}
 
-	// FIX-ME: Implement useLatestBackup logic
-	return nil, nil
+	if len(snapshotList.Items) == 0 {
+		return nil, fmt.Errorf("no snapshots found for StatefulSet %s", restore.Spec.StatefulSetRef.Name)
+	}
+
+	return snapshotList.Items, nil
 }
 
 // restoreSnapshots performs the actual restoration of PVCs from snapshots.

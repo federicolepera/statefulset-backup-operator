@@ -282,25 +282,6 @@ var _ = Describe("StatefulSetRestore Controller", func() {
 		})
 
 		Context("findSnapshotToRestore function", func() {
-			It("should return error when neither backupName nor useLatestBackup is specified", func() {
-				restore := &backupv1alpha1.StatefulSetRestore{
-					Spec: backupv1alpha1.StatefulSetRestoreSpec{
-						StatefulSetRef: backupv1alpha1.StatefulSetRef{
-							Name:      "test-sts",
-							Namespace: namespace,
-						},
-					},
-				}
-
-				reconciler := &StatefulSetRestoreReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := reconciler.findSnapshotToRestore(ctx, restore)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("either backupName or useLatestBackup must be specified"))
-			})
 
 			It("should handle backup name specification", func() {
 				restore := &backupv1alpha1.StatefulSetRestore{

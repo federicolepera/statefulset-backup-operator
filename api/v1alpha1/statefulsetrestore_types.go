@@ -26,7 +26,6 @@ type StatefulSetRestoreSpec struct {
 	StatefulSetRef StatefulSetRef `json:"statefulSetRef"`
 
 	// BackupName specifies the name of the backup to restore from
-	// If not specified, use UseLatestBackup instead
 	BackupName string `json:"backupName"`
 
 	// SnapshotNames specifies a list of specific snapshots to restore (one per PVC)
