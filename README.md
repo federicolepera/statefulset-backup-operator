@@ -4,7 +4,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20%2B-brightgreen.svg)](https://kubernetes.io)
 [![Go Report Card](https://goreportcard.com/badge/github.com/federicolepera/statefulset-backup-operator)](https://goreportcard.com/report/github.com/federicolepera/statefulset-backup-operator)
 
-> ⚠️ **Work in Progress** - Version 0.0.6
+> ⚠️ **Work in Progress** - Version 0.0.7
 > This operator is under active development. APIs may change, and some features are still being implemented.
 
 A Kubernetes operator for automated backup and restore of StatefulSets using native VolumeSnapshot APIs. Features scheduled snapshots, retention policies, pre/post hooks, and point-in-time recovery with a simple declarative interface.
@@ -121,9 +121,48 @@ kubectl apply -f config/rbac/
 kubectl apply -f config/manager/
 ```
 
-### 🎁 Helm Chart (Coming Soon)
+### Option 3: Helm Chart (Recommended)
 
-A Helm chart is currently in development and will be available in the next release.
+```bash
+# Install from local chart
+helm install statefulset-backup-operator ./charts/statefulset-backup-operator \
+  -n statefulset-backup-system --create-namespace
+
+# With custom image
+helm install statefulset-backup-operator ./charts/statefulset-backup-operator \
+  --set image.repository=myregistry/statefulset-backup-operator \
+  --set image.tag=v0.0.7 \
+  -n statefulset-backup-system --create-namespace
+
+# Upgrade existing installation
+helm upgrade statefulset-backup-operator ./charts/statefulset-backup-operator \
+  -n statefulset-backup-system
+```
+
+**Helm Values:**
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `image.repository` | Image repository | `ghcr.io/federicolepera/statefulset-backup-operator` |
+| `image.tag` | Image tag | `appVersion` from Chart.yaml |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `replicaCount` | Number of replicas | `1` |
+| `resources.limits.cpu` | CPU limit | `500m` |
+| `resources.limits.memory` | Memory limit | `128Mi` |
+| `resources.requests.cpu` | CPU request | `10m` |
+| `resources.requests.memory` | Memory request | `64Mi` |
+| `serviceAccount.create` | Create ServiceAccount | `true` |
+| `leaderElection.enabled` | Enable leader election | `true` |
+| `metrics.enabled` | Enable metrics endpoint | `true` |
+| `metrics.port` | Metrics port | `8080` |
+| `health.port` | Health probe port | `8081` |
+
+The Helm chart automatically installs:
+- CRDs for StatefulSetBackup and StatefulSetRestore
+- ClusterRole with all required permissions
+- ClusterRoleBinding
+- ServiceAccount
+- Deployment with health probes and security context
 
 ## 📖 Usage
 
@@ -444,8 +483,8 @@ The following features are currently under development or planned:
 - [x] Hook timeout configuration (v0.0.4)
 - [x] Configurable PVC deletion timeout for restore (v0.0.5)
 - [x] Snapshot readiness verification before retention (v0.0.6)
+- [x] Helm chart for easy installation (v0.0.7)
 - [ ] Combined retention policies (both `keepLast` and `keepDays` together)
-- [ ] Helm chart for easy installation
 - [ ] Webhook validation for CRDs
 - [ ] Backup verification and integrity checks
 - [ ] Metrics and Prometheus integration
@@ -658,9 +697,29 @@ If you find this project useful, please consider giving it a star! It helps the 
 
 ---
 
-**Note**: This operator is in active development (v0.0.6). APIs and features may change. Not recommended for production use until v1.0.0 release.
+**Note**: This operator is in active development (v0.0.7). APIs and features may change. Not recommended for production use until v1.0.0 release.
 
 ## 📊 Changelog
+
+### Version 0.0.7 (2026-01-15)
+
+**New Features:**
+- ✅ Helm chart for easy installation - deploy the operator with a single `helm install` command
+- ✅ Fully customizable via Helm values (image, resources, replicas, etc.)
+- ✅ Automatic CRD installation via Helm chart
+
+**Helm Chart Includes:**
+- ServiceAccount with ClusterRole for cluster-wide permissions
+- ClusterRole with permissions for: StatefulSets, VolumeSnapshots, VolumeSnapshotClasses, PVCs, Pods/exec (for hooks), Events, and CRDs
+- Deployment with security context, health probes, and resource limits
+- Leader election support for HA deployments
+- Metrics endpoint configuration
+
+**Installation:**
+```bash
+helm install statefulset-backup-operator ./charts/statefulset-backup-operator \
+  -n statefulset-backup-system --create-namespace
+```
 
 ### Version 0.0.6 (2026-01-15)
 
